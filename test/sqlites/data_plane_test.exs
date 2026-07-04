@@ -15,6 +15,10 @@ defmodule Sqlites.DataPlaneTest do
     assert File.exists?(database.file_path)
     assert {:ok, node} = DataPlane.owner_node(database.id)
     assert node == Node.self()
+
+    persisted = ControlPlane.get_database(database.id)
+    assert persisted.file_path == database.file_path
+    assert persisted.node == database.node
   end
 
   test "query/3 routes to the placed database" do

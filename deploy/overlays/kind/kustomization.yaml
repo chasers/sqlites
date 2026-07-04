@@ -31,6 +31,7 @@ secretGenerator:
       - S3_SECRET_ACCESS_KEY=sqlites-secret
       - S3_ENDPOINT=http://minio:9000
       - S3_BUCKET=sqlites-replica
+      - LITESTREAM_REPLICA_URL_PREFIX=s3://sqlites-replica.minio:9000/litestream
 
 generatorOptions:
   disableNameSuffixHash: true

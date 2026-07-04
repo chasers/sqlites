@@ -54,6 +54,10 @@ spec:
               value: /var/lib/sqlites/data
             - name: PHX_SERVER
               value: "true"
+            - name: LITESTREAM_ENABLED
+              value: "true"
+            - name: LITESTREAM_SOCKET
+              value: /var/run/litestream/litestream.sock
           volumeMounts:
             - name: data
               mountPath: /var/lib/sqlites/data
@@ -78,6 +82,9 @@ spec:
         - name: litestream
           image: litestream/litestream:0.5
           args: ["replicate", "-config", "/etc/litestream.yml"]
+          securityContext:
+            runAsUser: 65534
+            runAsGroup: 65534
           env:
             - name: LITESTREAM_ACCESS_KEY_ID
               valueFrom:

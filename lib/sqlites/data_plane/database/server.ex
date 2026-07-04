@@ -61,14 +61,21 @@ defmodule Sqlites.DataPlane.Database.Server do
           database_id: database_id,
           file_path: file_path,
           conn: conn,
-          idle_ttl: idle_ttl
+          idle_ttl: idle_ttl,
+          database: Keyword.get(opts, :database)
         }
 
-        {:ok, state, idle_ttl}
+        {:ok, state, {:continue, :register_replication}}
 
       {:error, reason} ->
         {:stop, {:sqlite_open_failed, reason}}
     end
+  end
+
+  @impl true
+  def handle_continue(:register_replication, state) do
+    if state.database, do: Sqlites.DataPlane.Litestream.register(state.database)
+    {:noreply, state, state.idle_ttl}
   end
 
   @impl true
@@ -78,6 +85,7 @@ defmodule Sqlites.DataPlane.Database.Server do
 
   @impl true
   def handle_info(:timeout, state) do
+    if state.database, do: Sqlites.DataPlane.Litestream.stop(state.file_path)
     {:stop, :normal, state}
   end
 

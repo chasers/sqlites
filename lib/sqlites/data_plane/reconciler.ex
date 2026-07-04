@@ -4,8 +4,11 @@ defmodule Sqlites.DataPlane.Reconciler do
   for which databases this node owns, not the node name recorded in the
   control plane. On startup, walk the data directory and claim any
   database whose file lives here but whose record points elsewhere —
-  covering node renames, volumes remounted into a different slot, and
-  failover restores. Does not start servers; activation stays lazy.
+  covering node renames and volumes remounted into a different slot.
+  Databases whose record points at a currently-connected node are never
+  reclaimed: a returning node's local files are stale copies when its
+  databases were failed over to survivors while it was down. Does not
+  start servers; activation stays lazy.
   """
 
   use Task, restart: :transient
@@ -35,6 +38,8 @@ defmodule Sqlites.DataPlane.Reconciler do
     data_dir = Application.fetch_env!(:sqlites, :data_dir)
     local_ids = discover_local_database_ids(data_dir)
 
+    live_other_nodes = Enum.map(Node.list(), &to_string/1)
+
     claimed =
       local_ids
       |> Enum.chunk_every(@claim_chunk_size)
@@ -43,6 +48,7 @@ defmodule Sqlites.DataPlane.Reconciler do
           Database
           |> where([d], d.id in ^chunk)
           |> where([d], d.node != ^node_name or is_nil(d.node))
+          |> where([d], is_nil(d.node) or d.node not in ^live_other_nodes)
           |> update([d],
             set: [
               node: ^node_name,

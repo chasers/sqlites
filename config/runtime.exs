@@ -89,6 +89,11 @@ if config_env() == :prod do
     secret_access_key: System.get_env("S3_SECRET_ACCESS_KEY"),
     endpoint: System.get_env("S3_ENDPOINT")
 
+  config :sqlites, Sqlites.DataPlane.Litestream,
+    enabled: System.get_env("LITESTREAM_ENABLED") in ~w(true 1),
+    socket: System.get_env("LITESTREAM_SOCKET") || "/var/run/litestream/litestream.sock",
+    replica_url_prefix: System.get_env("LITESTREAM_REPLICA_URL_PREFIX")
+
   if gen_rpc_port = System.get_env("GEN_RPC_PORT") do
     config :gen_rpc, tcp_server_port: String.to_integer(gen_rpc_port)
   end

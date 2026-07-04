@@ -6,5 +6,8 @@ metadata:
 data:
   litestream.yml: |
     # Databases are registered dynamically by the data plane over the
-    # control socket (litestream register); no static list here.
+    # control socket (hot-set replication); no static list here.
+    socket:
+      enabled: true
+      path: /var/run/litestream/litestream.sock
     dbs: []

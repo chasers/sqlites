@@ -7,7 +7,7 @@ defmodule Sqlites.DataPlane do
 
   alias Sqlites.ControlPlane
   alias Sqlites.ControlPlane.Database
-  alias Sqlites.DataPlane.{Placement, Registry, Router, Supervisor}
+  alias Sqlites.DataPlane.{Litestream, Placement, Registry, Router, Supervisor}
 
   @gen_rpc_timeout :timer.seconds(15)
 
@@ -28,8 +28,10 @@ defmodule Sqlites.DataPlane do
   @spec place_database_locally(Database.t()) :: {:ok, Database.t()} | {:error, term()}
   def place_database_locally(%Database{} = database) do
     file_path = file_path_for(database)
+    server_database = %{database | file_path: file_path}
 
-    with {:ok, _pid} <- Supervisor.start_database(database.id, file_path) do
+    with {:ok, _pid} <-
+           Supervisor.start_database(database.id, file_path, database: server_database) do
       ControlPlane.mark_placed(database, Node.self(), file_path)
     end
   end
@@ -77,9 +79,30 @@ defmodule Sqlites.DataPlane do
 
   def activate_database(%Database{}), do: {:error, :database_not_active}
 
+  @doc """
+  Starts the server for a database this node owns. When the file is
+  missing from the local volume — the failover case, where placement
+  was reassigned to this node — the litestream replica is restored
+  first. A database is never started from an empty file.
+  """
   @spec activate_database_locally(Database.t()) :: {:ok, pid()} | {:error, term()}
   def activate_database_locally(%Database{} = database) do
-    Supervisor.start_database(database.id, database.file_path)
+    with :ok <- ensure_local_file(database) do
+      Supervisor.start_database(database.id, database.file_path, database: database)
+    end
+  end
+
+  defp ensure_local_file(%Database{file_path: file_path} = database) do
+    cond do
+      File.exists?(file_path) ->
+        :ok
+
+      match?(:ok, Litestream.restore(database, file_path)) ->
+        :ok
+
+      true ->
+        {:error, :database_file_missing}
+    end
   end
 
   @doc """
@@ -151,11 +174,12 @@ defmodule Sqlites.DataPlane do
   def restore_from_file_locally(%Database{} = database, backup_path) do
     if File.exists?(backup_path) and is_binary(database.file_path) do
       :ok = Supervisor.stop_database(database.id)
+      Litestream.stop(database.file_path)
       File.rm(database.file_path <> "-wal")
       File.rm(database.file_path <> "-shm")
       File.cp!(backup_path, database.file_path)
 
-      case Supervisor.start_database(database.id, database.file_path) do
+      case Supervisor.start_database(database.id, database.file_path, database: database) do
         {:ok, _pid} -> :ok
         {:error, reason} -> {:error, reason}
       end
@@ -171,6 +195,7 @@ defmodule Sqlites.DataPlane do
   @spec remove_database_locally(Database.t()) :: {:ok, Database.t()} | {:error, term()}
   def remove_database_locally(%Database{} = database) do
     :ok = Supervisor.stop_database(database.id)
+    if database.file_path, do: Litestream.stop(database.file_path)
 
     if database.file_path do
       File.rm(database.file_path)

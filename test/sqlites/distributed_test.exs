@@ -147,6 +147,34 @@ defmodule Sqlites.DistributedTest do
     assert {:error, :database_not_running} = Router.query(database_id, "SELECT 1")
   end
 
+  test "reconciler does not reclaim databases owned by a live node",
+       %{peer_node: peer_node} do
+    Ecto.Adapters.SQL.Sandbox.checkout(Sqlites.Repo)
+    Ecto.Adapters.SQL.Sandbox.mode(Sqlites.Repo, {:shared, self()})
+
+    tenant = Sqlites.Fixtures.tenant_fixture()
+    database = Sqlites.Fixtures.database_fixture(tenant)
+
+    data_dir = Application.fetch_env!(:sqlites, :data_dir)
+    file_path = Path.join([data_dir, tenant.id, database.id <> ".db"])
+    File.mkdir_p!(Path.dirname(file_path))
+    File.write!(file_path, "stale local copy")
+    on_exit(fn -> File.rm(file_path) end)
+
+    {:ok, _} =
+      database
+      |> Sqlites.ControlPlane.Database.placement_changeset(%{
+        status: :active,
+        node: to_string(peer_node),
+        file_path: file_path
+      })
+      |> Sqlites.Repo.update()
+
+    Sqlites.DataPlane.Reconciler.reconcile()
+
+    assert Sqlites.ControlPlane.get_database(database.id).node == to_string(peer_node)
+  end
+
   defp start_remote_server(peer_node, database_id, file_path) do
     via = :erpc.call(peer_node, Sqlites.DataPlane.Registry, :via, [database_id])
 
