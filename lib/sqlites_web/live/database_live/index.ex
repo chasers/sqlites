@@ -2,7 +2,6 @@ defmodule SqlitesWeb.DatabaseLive.Index do
   use SqlitesWeb, :live_view
 
   alias Sqlites.ControlPlane
-  alias Sqlites.DataPlane
   alias Sqlites.Infra
 
   @impl true
@@ -24,17 +23,14 @@ defmodule SqlitesWeb.DatabaseLive.Index do
 
   @impl true
   def handle_event("create", %{"name" => name}, socket) do
-    tenant = socket.assigns.tenant
+    case Sqlites.create_database(socket.assigns.tenant, %{"name" => name}) do
+      {:ok, database} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Database #{database.name} created")
+         |> assign(:new_database_form, to_form(%{"name" => ""}))
+         |> load_databases()}
 
-    with {:ok, database} <- ControlPlane.create_database(tenant, %{"name" => name}),
-         {:ok, database} <- DataPlane.place_database(database),
-         :ok <- Infra.provision(database) do
-      {:noreply,
-       socket
-       |> put_flash(:info, "Database #{database.name} created")
-       |> assign(:new_database_form, to_form(%{"name" => ""}))
-       |> load_databases()}
-    else
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, put_flash(socket, :error, "Invalid name: #{inspect(changeset.errors[:name])}")}
 
@@ -44,12 +40,9 @@ defmodule SqlitesWeb.DatabaseLive.Index do
   end
 
   def handle_event("delete", %{"id" => id}, socket) do
-    tenant = socket.assigns.tenant
-
-    with database when not is_nil(database) <- ControlPlane.get_database(tenant, id),
-         {:ok, database} <- ControlPlane.mark_deleting(database),
-         :ok <- Infra.deprovision(database),
-         {:ok, _} <- DataPlane.remove_database(database) do
+    with database when not is_nil(database) <-
+           ControlPlane.get_database(socket.assigns.tenant, id),
+         {:ok, _} <- Sqlites.remove_database(database) do
       {:noreply,
        socket
        |> put_flash(:info, "Database deleted")

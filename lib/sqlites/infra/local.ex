@@ -64,21 +64,7 @@ defmodule Sqlites.Infra.Local do
 
   @impl true
   def restore(%Database{} = database, backup_id) do
-    backup = backup_path(database, backup_id)
-
-    if File.exists?(backup) and is_binary(database.file_path) do
-      :ok = Sqlites.DataPlane.Supervisor.stop_database(database.id)
-      File.rm(database.file_path <> "-wal")
-      File.rm(database.file_path <> "-shm")
-      File.cp!(backup, database.file_path)
-
-      case Sqlites.DataPlane.Supervisor.start_database(database.id, database.file_path) do
-        {:ok, _pid} -> :ok
-        {:error, reason} -> {:error, reason}
-      end
-    else
-      {:error, :backup_not_found}
-    end
+    DataPlane.restore_from_file(database, backup_path(database, backup_id))
   end
 
   defp generate_backup_id do

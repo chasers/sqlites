@@ -2,8 +2,6 @@ defmodule SqlitesWeb.Api.DatabaseController do
   use SqlitesWeb, :controller
 
   alias Sqlites.ControlPlane
-  alias Sqlites.DataPlane
-  alias Sqlites.Infra
 
   action_fallback SqlitesWeb.Api.FallbackController
 
@@ -13,11 +11,7 @@ defmodule SqlitesWeb.Api.DatabaseController do
   end
 
   def create(conn, params) do
-    tenant = conn.assigns.current_tenant
-
-    with {:ok, database} <- ControlPlane.create_database(tenant, params),
-         {:ok, database} <- DataPlane.place_database(database),
-         :ok <- Infra.provision(database) do
+    with {:ok, database} <- Sqlites.create_database(conn.assigns.current_tenant, params) do
       conn
       |> put_status(:created)
       |> render(:show, database: database, include_token: true)
@@ -32,9 +26,7 @@ defmodule SqlitesWeb.Api.DatabaseController do
 
   def delete(conn, %{"id" => id}) do
     with {:ok, database} <- fetch_database(conn, id),
-         {:ok, database} <- ControlPlane.mark_deleting(database),
-         :ok <- Infra.deprovision(database),
-         {:ok, _database} <- DataPlane.remove_database(database) do
+         {:ok, _database} <- Sqlites.remove_database(database) do
       send_resp(conn, :no_content, "")
     end
   end

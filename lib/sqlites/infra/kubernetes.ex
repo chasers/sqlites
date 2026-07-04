@@ -107,7 +107,14 @@ defmodule Sqlites.Infra.Kubernetes do
   end
 
   defp conn do
-    {:ok, conn} = K8s.Conn.from_service_account()
-    conn
+    case :persistent_term.get({__MODULE__, :conn}, nil) do
+      nil ->
+        {:ok, conn} = K8s.Conn.from_service_account()
+        :persistent_term.put({__MODULE__, :conn}, conn)
+        conn
+
+      conn ->
+        conn
+    end
   end
 end

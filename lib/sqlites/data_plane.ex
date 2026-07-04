@@ -44,6 +44,10 @@ defmodule Sqlites.DataPlane do
 
   @spec remove_database(Database.t()) :: {:ok, Database.t()} | {:error, term()}
   def remove_database(%Database{} = database) do
+    on_owner_node(database, :remove_database_locally, [database])
+  end
+
+  defp on_owner_node(%Database{} = database, function, args) do
     owner =
       case database.node do
         nil -> Node.self()
@@ -51,19 +55,39 @@ defmodule Sqlites.DataPlane do
       end
 
     if owner == Node.self() do
-      remove_database_locally(database)
+      apply(__MODULE__, function, args)
     else
-      case :gen_rpc.call(
-             owner,
-             __MODULE__,
-             :remove_database_locally,
-             [database],
-             @gen_rpc_timeout
-           ) do
+      case :gen_rpc.call(owner, __MODULE__, function, args, @gen_rpc_timeout) do
         {:badrpc, reason} -> {:error, {:badrpc, reason}}
         {:badtcp, reason} -> {:error, {:badtcp, reason}}
         result -> result
       end
+    end
+  end
+
+  @spec restore_from_file(Database.t(), Path.t()) :: :ok | {:error, term()}
+  def restore_from_file(%Database{} = database, backup_path) do
+    on_owner_node(database, :restore_from_file_locally, [database, backup_path])
+  end
+
+  @doc """
+  Executed on the node that owns the database file — locally or via
+  `gen_rpc`. Drains the writer, swaps in the backup, and restarts it.
+  """
+  @spec restore_from_file_locally(Database.t(), Path.t()) :: :ok | {:error, term()}
+  def restore_from_file_locally(%Database{} = database, backup_path) do
+    if File.exists?(backup_path) and is_binary(database.file_path) do
+      :ok = Supervisor.stop_database(database.id)
+      File.rm(database.file_path <> "-wal")
+      File.rm(database.file_path <> "-shm")
+      File.cp!(backup_path, database.file_path)
+
+      case Supervisor.start_database(database.id, database.file_path) do
+        {:ok, _pid} -> :ok
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      {:error, :backup_not_found}
     end
   end
 

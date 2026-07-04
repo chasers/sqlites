@@ -24,7 +24,7 @@ defmodule SqlitesWeb.Api.TenantController do
   end
 
   def delete(conn, _params) do
-    with {:ok, _tenant} <- ControlPlane.delete_tenant(conn.assigns.current_tenant) do
+    with {:ok, _tenant} <- Sqlites.delete_tenant(conn.assigns.current_tenant) do
       send_resp(conn, :no_content, "")
     end
   end

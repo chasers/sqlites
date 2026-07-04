@@ -32,6 +32,11 @@ defmodule Sqlites.DistributedTest do
 
     :ok = :erpc.call(peer_node, :code, :add_paths, [:code.get_path()])
 
+    peer_env =
+      for app <- [:sqlites, :phoenix, :logger, :gen_rpc], do: {app, Application.get_all_env(app)}
+
+    :ok = :erpc.call(peer_node, Application, :put_all_env, [peer_env, [persistent: true]])
+
     :ok =
       :erpc.call(peer_node, Application, :put_env, [
         :gen_rpc,
@@ -40,10 +45,7 @@ defmodule Sqlites.DistributedTest do
         [persistent: true]
       ])
 
-    {:ok, _} = :erpc.call(peer_node, Application, :ensure_all_started, [:syn])
-    {:ok, _} = :erpc.call(peer_node, Application, :ensure_all_started, [:gen_rpc])
-    {:ok, _} = :erpc.call(peer_node, Application, :ensure_all_started, [:exqlite])
-    :ok = :erpc.call(peer_node, Sqlites.DataPlane.Registry, :init, [])
+    {:ok, _} = :erpc.call(peer_node, Application, :ensure_all_started, [:sqlites])
 
     previous_config = Application.get_env(:gen_rpc, :client_config_per_node)
 
@@ -80,6 +82,34 @@ defmodule Sqlites.DistributedTest do
     assert {:ok, %{rows: [["from-primary"]]}} = Router.query(database_id, "SELECT v FROM t")
 
     assert File.exists?(file_path)
+  end
+
+  test "restore_from_file/2 drains and swaps the file on the owning node",
+       %{peer_node: peer_node, tmp_dir: tmp_dir} do
+    database_id = "dist-db-#{System.unique_integer([:positive])}"
+    file_path = Path.join(tmp_dir, database_id <> ".db")
+
+    {:ok, _remote_pid} = start_remote_server(peer_node, database_id, file_path)
+    wait_until(fn -> Registry.whereis(database_id) != :undefined end)
+
+    assert {:ok, _} = Router.query(database_id, "CREATE TABLE t (v TEXT)")
+    assert {:ok, _} = Router.query(database_id, "INSERT INTO t VALUES ('keep')")
+
+    backup_path = Path.join(tmp_dir, "backup.db")
+    assert {:ok, _} = Router.query(database_id, "VACUUM INTO ?", [backup_path])
+    assert {:ok, _} = Router.query(database_id, "DELETE FROM t")
+
+    database = %Sqlites.ControlPlane.Database{
+      id: database_id,
+      node: to_string(peer_node),
+      file_path: file_path
+    }
+
+    assert :ok = Sqlites.DataPlane.restore_from_file(database, backup_path)
+
+    wait_until(fn -> Registry.whereis(database_id) != :undefined end)
+    assert {:ok, ^peer_node} = Registry.owner_node(database_id)
+    assert {:ok, %{rows: [["keep"]]}} = Router.query(database_id, "SELECT v FROM t")
   end
 
   test "syn deregisters the database when the peer goes down",
