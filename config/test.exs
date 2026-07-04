@@ -7,6 +7,8 @@ config :sqlites,
 
 config :gen_rpc, tcp_server_port: 15369
 
+config :libcluster, topologies: []
+
 # Configure your database
 #
 # The MIX_TEST_PARTITION environment variable can be used

@@ -12,7 +12,7 @@ defmodule Sqlites.Application do
     children = [
       SqlitesWeb.Telemetry,
       Sqlites.Repo,
-      {DNSCluster, query: Application.get_env(:sqlites, :dns_cluster_query) || :ignore},
+      {Cluster.Supervisor, [cluster_topologies(), [name: Sqlites.ClusterSupervisor]]},
       {Phoenix.PubSub, name: Sqlites.PubSub},
       Sqlites.DataPlane.Supervisor,
       Sqlites.DataPlane.Reloader,
@@ -31,5 +31,27 @@ defmodule Sqlites.Application do
   def config_change(changed, _new, removed) do
     SqlitesWeb.Endpoint.config_change(changed, removed)
     :ok
+  end
+
+  defp cluster_topologies do
+    Application.get_env(:libcluster, :topologies) || default_topologies()
+  end
+
+  defp default_topologies do
+    repo_config = Application.fetch_env!(:sqlites, Sqlites.Repo)
+
+    [
+      postgres: [
+        strategy: LibclusterPostgres.Strategy,
+        config:
+          repo_config
+          |> Keyword.take([:hostname, :username, :password, :database, :port])
+          |> Keyword.merge(
+            port: repo_config[:port] || 5432,
+            parameters: [],
+            channel_name: "sqlites_cluster"
+          )
+      ]
+    ]
   end
 end

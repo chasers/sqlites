@@ -61,7 +61,7 @@ defmodule Sqlites.MixProject do
       {:telemetry_poller, "~> 1.0"},
       {:gettext, "~> 1.0"},
       {:jason, "~> 1.2"},
-      {:dns_cluster, "~> 0.2.0"},
+      {:libcluster_postgres, "~> 0.2"},
       {:bandit, "~> 1.5"},
       {:syn, "~> 3.3"},
       {:gen_rpc, "~> 2.1"},
