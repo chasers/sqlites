@@ -112,6 +112,26 @@ defmodule Sqlites.DistributedTest do
     assert {:ok, %{rows: [["keep"]]}} = Router.query(database_id, "SELECT v FROM t")
   end
 
+  test "a losing cross-node activation race never opens the file",
+       %{peer_node: peer_node, tmp_dir: tmp_dir} do
+    database_id = "dist-db-#{System.unique_integer([:positive])}"
+    peer_file = Path.join(tmp_dir, "peer-" <> database_id <> ".db")
+    local_file = Path.join(tmp_dir, "local-" <> database_id <> ".db")
+
+    {:ok, remote_pid} = start_remote_server(peer_node, database_id, peer_file)
+    wait_until(fn -> Registry.whereis(database_id) == remote_pid end)
+
+    assert {:error, {:already_started, ^remote_pid}} =
+             GenServer.start(
+               Sqlites.DataPlane.Database.Server,
+               [database_id: database_id, file_path: local_file],
+               name: Sqlites.DataPlane.Registry.via(database_id)
+             )
+
+    refute File.exists?(local_file)
+    assert {:ok, ^peer_node} = Registry.owner_node(database_id)
+  end
+
   test "syn deregisters the database when the peer goes down",
        %{peer_pid: peer_pid, peer_node: peer_node, tmp_dir: tmp_dir} do
     database_id = "dist-db-#{System.unique_integer([:positive])}"

@@ -17,9 +17,9 @@ defmodule Sqlites.DataPlane.Supervisor do
     PartitionSupervisor.child_spec(child_spec: DynamicSupervisor, name: __MODULE__)
   end
 
-  @spec start_database(String.t(), String.t()) :: {:ok, pid()} | {:error, term()}
-  def start_database(database_id, file_path) do
-    spec = {Server, database_id: database_id, file_path: file_path}
+  @spec start_database(String.t(), String.t(), keyword()) :: {:ok, pid()} | {:error, term()}
+  def start_database(database_id, file_path, opts \\ []) do
+    spec = {Server, Keyword.merge(opts, database_id: database_id, file_path: file_path)}
 
     case DynamicSupervisor.start_child(partition_for(database_id), spec) do
       {:ok, pid} -> {:ok, pid}

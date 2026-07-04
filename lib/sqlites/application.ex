@@ -15,7 +15,6 @@ defmodule Sqlites.Application do
       {Cluster.Supervisor, [cluster_topologies(), [name: Sqlites.ClusterSupervisor]]},
       {Phoenix.PubSub, name: Sqlites.PubSub},
       Sqlites.DataPlane.Supervisor,
-      Sqlites.DataPlane.Reloader,
       SqlitesWeb.Endpoint
     ]
 

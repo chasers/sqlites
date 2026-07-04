@@ -65,6 +65,23 @@ defmodule Sqlites.DataPlane do
     end
   end
 
+  @doc """
+  Starts the database's server on its owning node if it isn't running —
+  the activate-on-miss path for lazily woken databases.
+  """
+  @spec activate_database(Database.t()) :: {:ok, pid()} | {:error, term()}
+  def activate_database(%Database{status: :active, file_path: file_path} = database)
+      when is_binary(file_path) do
+    on_owner_node(database, :activate_database_locally, [database])
+  end
+
+  def activate_database(%Database{}), do: {:error, :database_not_active}
+
+  @spec activate_database_locally(Database.t()) :: {:ok, pid()} | {:error, term()}
+  def activate_database_locally(%Database{} = database) do
+    Supervisor.start_database(database.id, database.file_path)
+  end
+
   @spec restore_from_file(Database.t(), Path.t()) :: :ok | {:error, term()}
   def restore_from_file(%Database{} = database, backup_path) do
     on_owner_node(database, :restore_from_file_locally, [database, backup_path])

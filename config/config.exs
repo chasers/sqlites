@@ -11,7 +11,8 @@ config :sqlites,
   ecto_repos: [Sqlites.Repo],
   generators: [timestamp_type: :utc_datetime],
   data_dir: "/var/lib/sqlites/data",
-  infra_adapter: Sqlites.Infra.Kubernetes
+  infra_adapter: Sqlites.Infra.Kubernetes,
+  database_idle_ttl: :timer.hours(1)
 
 # Configure the endpoint
 config :sqlites, SqlitesWeb.Endpoint,

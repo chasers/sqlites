@@ -30,6 +30,30 @@ defmodule Sqlites.DataPlaneTest do
     assert {:error, :database_not_running} = DataPlane.query("no-such-db", "SELECT 1")
   end
 
+  test "query/3 activates a cold database on miss" do
+    tenant = tenant_fixture()
+    database = placed_database_fixture(tenant)
+
+    {:ok, _} = DataPlane.query(database.id, "CREATE TABLE t (v TEXT)")
+    {:ok, _} = DataPlane.query(database.id, "INSERT INTO t VALUES ('warm')")
+
+    :ok = DataPlane.Supervisor.stop_database(database.id)
+    assert DataPlane.Registry.whereis(database.id) == :undefined
+
+    assert {:ok, %{rows: [["warm"]]}} = DataPlane.query(database.id, "SELECT v FROM t")
+    assert is_pid(DataPlane.Registry.whereis(database.id))
+  end
+
+  test "query/3 does not activate a deleting database" do
+    tenant = tenant_fixture()
+    database = placed_database_fixture(tenant)
+    :ok = DataPlane.Supervisor.stop_database(database.id)
+
+    {:ok, _} = Sqlites.ControlPlane.mark_deleting(database)
+
+    assert {:error, :database_not_active} = DataPlane.query(database.id, "SELECT 1")
+  end
+
   test "remove_database/1 stops the server, deletes the file and the record" do
     tenant = tenant_fixture()
     database = placed_database_fixture(tenant)

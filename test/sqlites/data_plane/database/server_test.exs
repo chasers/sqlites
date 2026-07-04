@@ -55,6 +55,28 @@ defmodule Sqlites.DataPlane.Database.ServerTest do
     assert {:ok, %{rows: [[50]]}} = Server.query(database_id, "SELECT n FROM counter")
   end
 
+  test "stops after the idle TTL, kept alive by queries", %{tmp_dir: tmp_dir} do
+    database_id = "ttl-test-#{System.unique_integer([:positive])}"
+    file_path = Path.join(tmp_dir, database_id <> ".db")
+
+    start_supervised!(
+      {Server, database_id: database_id, file_path: file_path, idle_ttl: 300},
+      id: :ttl_server
+    )
+
+    for _ <- 1..3 do
+      Process.sleep(150)
+      assert {:ok, _} = Server.query(database_id, "SELECT 1")
+    end
+
+    pid = Sqlites.DataPlane.Registry.whereis(database_id)
+    assert is_pid(pid)
+
+    ref = Process.monitor(pid)
+    assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1_000
+    assert Sqlites.DataPlane.Registry.whereis(database_id) == :undefined
+  end
+
   test "persists data across a restart", %{database_id: database_id, file_path: file_path} do
     assert {:ok, _} = Server.query(database_id, "CREATE TABLE t (v TEXT)")
     assert {:ok, _} = Server.query(database_id, "INSERT INTO t VALUES ('kept')")

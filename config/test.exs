@@ -2,8 +2,7 @@ import Config
 
 config :sqlites,
   data_dir: Path.expand("../.data/test#{System.get_env("MIX_TEST_PARTITION")}", __DIR__),
-  infra_adapter: Sqlites.Infra.Local,
-  reload_databases_on_boot: false
+  infra_adapter: Sqlites.Infra.Local
 
 config :gen_rpc, tcp_server_port: 15369
 

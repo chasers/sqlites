@@ -47,6 +47,7 @@ defmodule Sqlites.DataPlane.Database.Server do
   def init(opts) do
     database_id = Keyword.fetch!(opts, :database_id)
     file_path = Keyword.fetch!(opts, :file_path)
+    idle_ttl = Keyword.get(opts, :idle_ttl) || default_idle_ttl()
 
     File.mkdir_p!(Path.dirname(file_path))
 
@@ -55,7 +56,15 @@ defmodule Sqlites.DataPlane.Database.Server do
         :ok = Sqlite3.execute(conn, "PRAGMA journal_mode=WAL")
         :ok = Sqlite3.execute(conn, "PRAGMA foreign_keys=ON")
         :ok = Sqlite3.set_busy_timeout(conn, :timer.seconds(5))
-        {:ok, %{database_id: database_id, file_path: file_path, conn: conn}}
+
+        state = %{
+          database_id: database_id,
+          file_path: file_path,
+          conn: conn,
+          idle_ttl: idle_ttl
+        }
+
+        {:ok, state, idle_ttl}
 
       {:error, reason} ->
         {:stop, {:sqlite_open_failed, reason}}
@@ -64,12 +73,25 @@ defmodule Sqlites.DataPlane.Database.Server do
 
   @impl true
   def handle_call({:query, sql, args}, _from, state) do
-    {:reply, run_query(state.conn, sql, args), state}
+    {:reply, run_query(state.conn, sql, args), state, state.idle_ttl}
+  end
+
+  @impl true
+  def handle_info(:timeout, state) do
+    {:stop, :normal, state}
+  end
+
+  def handle_info(_message, state) do
+    {:noreply, state, state.idle_ttl}
   end
 
   @impl true
   def terminate(_reason, %{conn: conn}) do
     Sqlite3.close(conn)
+  end
+
+  defp default_idle_ttl do
+    Application.get_env(:sqlites, :database_idle_ttl, :timer.hours(1))
   end
 
   defp run_query(conn, sql, args) do

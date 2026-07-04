@@ -6,6 +6,7 @@ defmodule Sqlites.DataPlane.Router do
   carries only cluster membership and `:syn` gossip.
   """
 
+  alias Sqlites.ControlPlane
   alias Sqlites.DataPlane.Database.Server
   alias Sqlites.DataPlane.Registry
 
@@ -16,7 +17,17 @@ defmodule Sqlites.DataPlane.Router do
   def query(database_id, sql, args \\ []) do
     case Registry.owner_node(database_id) do
       {:ok, node} -> dispatch(node, database_id, sql, args)
-      {:error, :not_found} -> {:error, :database_not_running}
+      {:error, :not_found} -> activate_and_query(database_id, sql, args)
+    end
+  end
+
+  defp activate_and_query(database_id, sql, args) do
+    with %ControlPlane.Database{} = database <- ControlPlane.get_database(database_id),
+         {:ok, pid} <- Sqlites.DataPlane.activate_database(database) do
+      dispatch(node(pid), database_id, sql, args)
+    else
+      nil -> {:error, :database_not_running}
+      {:error, reason} -> {:error, reason}
     end
   end
 
