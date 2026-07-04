@@ -7,17 +7,32 @@ with any stock libSQL client or plain HTTP.
 
 ## Architecture
 
+Built for ~1M databases per cluster across ~10 data-plane nodes.
+
 **Control plane** (Postgres-backed): tenants, databases, auth tokens, and
-placement decisions. Never sits on the query path.
+placement decisions. Postgres is the source of truth for writes but never
+sits on the query path: every node keeps a **full ETS replica** of the
+request-path tables, bootstrapped with `COPY` at startup and kept current
+by streaming the WAL over a per-node permanent logical replication slot
+(`Postgrex.ReplicationConnection` + a minimal pgoutput decoder). Postgres
+downtime pauses create/delete; queries and auth keep working.
 
 **Data plane**: one `Sqlites.DataPlane.Database.Server` GenServer per
 database owns the single `exqlite` connection to that SQLite file (WAL
-mode) and serializes all writes. Processes register in
+mode) and serializes all writes. Servers activate **lazily on first
+query** and stay hot for a configurable idle TTL (default 1h), so boot is
+cold and traffic warms the set. Processes register in
 [`syn`](https://hex.pm/packages/syn) under the `:sqlites_databases`
-scope, so every node knows which node owns which database. Cross-node
-query traffic travels over [`gen_rpc`](https://hex.pm/packages/gen_rpc)
-— Erlang distribution carries only cluster membership and syn gossip,
-never query payloads.
+scope, so every node knows which node owns which database; registration
+happens before the SQLite file is opened, which guarantees a single
+writer even under racing activations. Cross-node query traffic travels
+over [`gen_rpc`](https://hex.pm/packages/gen_rpc) — Erlang distribution
+carries only cluster membership, syn gossip, and
+[libcluster_postgres](https://github.com/supabase/libcluster_postgres)
+node discovery (LISTEN/NOTIFY on the metadb), never query payloads.
+On boot each node walks its data volume and claims any database whose
+file is local but whose record points elsewhere — the volume, not the
+node name, is the source of truth for placement.
 
 **Client access** — no custom client needed:
 
