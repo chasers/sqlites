@@ -33,9 +33,21 @@ if config_env() == :prod do
 
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
 
+  db_uri = URI.parse(database_url)
+
+  [db_username | db_password] = String.split(db_uri.userinfo || "postgres", ":", parts: 2)
+
   config :sqlites, Sqlites.Repo,
     # ssl: true,
     url: database_url,
+    # Discrete connection keys are also set because the libcluster
+    # topology and the read-model replication connection build their
+    # own Postgres connections from this config.
+    hostname: db_uri.host,
+    port: db_uri.port || 5432,
+    username: db_username,
+    password: List.first(db_password) || "",
+    database: String.trim_leading(db_uri.path || "/sqlites", "/"),
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
     # For machines with several cores, consider starting multiple pools of `pool_size`
     # pool_count: 4,
@@ -54,9 +66,11 @@ if config_env() == :prod do
       """
 
   host = System.get_env("PHX_HOST") || "example.com"
+  url_port = String.to_integer(System.get_env("PHX_URL_PORT") || "443")
+  url_scheme = System.get_env("PHX_URL_SCHEME") || "https"
 
   config :sqlites, SqlitesWeb.Endpoint,
-    url: [host: host, port: 443, scheme: "https"],
+    url: [host: host, port: url_port, scheme: url_scheme],
     http: [
       # Enable IPv6 and bind on all interfaces.
       # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
@@ -65,6 +79,12 @@ if config_env() == :prod do
       ip: {0, 0, 0, 0, 0, 0, 0, 0}
     ],
     secret_key_base: secret_key_base
+
+  config :sqlites, data_dir: System.get_env("DATA_DIR") || "/var/lib/sqlites/data"
+
+  if gen_rpc_port = System.get_env("GEN_RPC_PORT") do
+    config :gen_rpc, tcp_server_port: String.to_integer(gen_rpc_port)
+  end
 
   # ## SSL Support
   #

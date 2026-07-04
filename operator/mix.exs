@@ -20,7 +20,8 @@ defmodule SqlitesOperator.MixProject do
 
   defp deps do
     [
-      {:bonny, "~> 1.4"}
+      {:bonny, "~> 1.4"},
+      {:postgrex, "~> 0.19"}
     ]
   end
 end

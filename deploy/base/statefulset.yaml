@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sqlites
+  namespace: sqlites
+spec:
+  serviceName: sqlites-headless
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: sqlites
+  template:
+    metadata:
+      labels:
+        app: sqlites
+    spec:
+      serviceAccountName: sqlites
+      terminationGracePeriodSeconds: 60
+      initContainers:
+        - name: migrate
+          image: sqlites:latest
+          command: ["/app/bin/migrate"]
+          envFrom:
+            - secretRef:
+                name: sqlites-env
+      containers:
+        - name: sqlites
+          image: sqlites:latest
+          ports:
+            - name: http
+              containerPort: 4000
+            - name: epmd
+              containerPort: 4369
+            - name: erl-dist
+              containerPort: 9100
+            - name: gen-rpc
+              containerPort: 5369
+          envFrom:
+            - secretRef:
+                name: sqlites-env
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: HEADLESS_SERVICE
+              value: sqlites-headless
+            - name: DATA_DIR
+              value: /var/lib/sqlites/data
+            - name: PHX_SERVER
+              value: "true"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/sqlites/data
+            - name: litestream-socket
+              mountPath: /var/run/litestream
+          readinessProbe:
+            httpGet:
+              path: /v1
+              port: 4000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /v1
+              port: 4000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+        - name: litestream
+          image: litestream/litestream:0.5
+          args: ["replicate", "-config", "/etc/litestream.yml"]
+          env:
+            - name: LITESTREAM_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: sqlites-env
+                  key: S3_ACCESS_KEY_ID
+            - name: LITESTREAM_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sqlites-env
+                  key: S3_SECRET_ACCESS_KEY
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/sqlites/data
+            - name: litestream-config
+              mountPath: /etc/litestream.yml
+              subPath: litestream.yml
+            - name: litestream-socket
+              mountPath: /var/run/litestream
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+      volumes:
+        - name: litestream-config
+          configMap:
+            name: litestream-config
+        - name: litestream-socket
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi

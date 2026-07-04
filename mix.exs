@@ -64,10 +64,8 @@ defmodule Sqlites.MixProject do
       {:libcluster_postgres, "~> 0.2"},
       {:bandit, "~> 1.5"},
       {:syn, "~> 3.3"},
-      {:gen_rpc, "~> 2.1"},
-      {:exqlite, "~> 0.30"},
-      {:k8s, "~> 2.6"},
-      {:castore, "~> 1.0"}
+      {:gen_rpc, github: "emqx/gen_rpc", tag: "3.6.1"},
+      {:exqlite, "~> 0.30"}
     ]
   end
 

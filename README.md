@@ -111,6 +111,24 @@ The LiveView UI is at [`localhost:4000`](http://localhost:4000) — sign
 up or paste a tenant API key, then create/delete databases, reveal
 connection strings, and trigger backups from the dashboard.
 
+## Deploying (Kubernetes)
+
+`deploy/` holds kustomize manifests: a 3-replica StatefulSet where pod
+`sqlites-N` ↔ PVC `data-sqlites-N` ↔ Erlang node name (the volume-claim
+identity model), each pod running a Litestream sidecar that databases
+are registered with dynamically over a control socket. The
+[operator](operator/) tracks one `SqliteNode` CR per data-plane node —
+never per database — reporting replication-slot health and database
+counts onto `kubectl get sqlitenodes`.
+
+Local end-to-end cluster (kind + in-cluster Postgres with
+`wal_level=logical` + MinIO):
+
+```sh
+./scripts/kind-up.sh
+curl http://localhost:8080/v1
+```
+
 ## Tests
 
 ```sh

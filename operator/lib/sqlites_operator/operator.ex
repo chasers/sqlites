@@ -1,6 +1,8 @@
 defmodule SqlitesOperator.Operator do
   @moduledoc """
-  Entry point wiring the SqliteDatabase CRD to its controller.
+  Entry point wiring the SqliteNode CRD to its controller. Sized for
+  the 1M-database target: kubernetes tracks per-*node* resources only
+  (hundreds of objects); per-database metadata never reaches etcd.
   """
 
   use Bonny.Operator, default_watch_namespace: "sqlites"
@@ -15,10 +17,10 @@ defmodule SqlitesOperator.Operator do
     [
       %{
         query:
-          K8s.Client.watch("sqlites.supabase.com/v1alpha1", "SqliteDatabase",
+          K8s.Client.watch("sqlites.supabase.com/v1alpha1", "SqliteNode",
             namespace: watching_namespace
           ),
-        controller: SqlitesOperator.Controller.SqliteDatabaseController
+        controller: SqlitesOperator.Controller.SqliteNodeController
       }
     ]
   end
@@ -29,8 +31,8 @@ defmodule SqlitesOperator.Operator do
       Bonny.API.CRD.new!(
         group: "sqlites.supabase.com",
         scope: :Namespaced,
-        names: Bonny.API.CRD.kind_to_names("SqliteDatabase", ["sqldb"]),
-        versions: [SqlitesOperator.API.V1Alpha1.SqliteDatabase]
+        names: Bonny.API.CRD.kind_to_names("SqliteNode", ["sqlnode"]),
+        versions: [SqlitesOperator.API.V1Alpha1.SqliteNode]
       )
     ]
   end

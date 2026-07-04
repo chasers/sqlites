@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sqlites
+  namespace: sqlites
+spec:
+  podManagementPolicy: OrderedReady
+  template:
+    spec:
+      containers:
+        - name: sqlites
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+        - name: litestream
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
