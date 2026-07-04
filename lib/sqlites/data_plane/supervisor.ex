@@ -3,26 +3,25 @@ defmodule Sqlites.DataPlane.Supervisor do
   Supervises the per-database `Database.Server` processes running on
   this node. The control plane decides placement; this supervisor only
   ever starts servers for databases assigned to the local node.
-  """
 
-  use DynamicSupervisor
+  Starts are partitioned across one `DynamicSupervisor` per scheduler
+  via `PartitionSupervisor`, keyed by database id: starts of different
+  databases parallelize, while concurrent starts of the same database
+  hash to the same partition and serialize — preserving the
+  single-activation guarantee.
+  """
 
   alias Sqlites.DataPlane.Database.Server
 
-  def start_link(opts) do
-    DynamicSupervisor.start_link(__MODULE__, opts, name: __MODULE__)
-  end
-
-  @impl true
-  def init(_opts) do
-    DynamicSupervisor.init(strategy: :one_for_one)
+  def child_spec(_opts) do
+    PartitionSupervisor.child_spec(child_spec: DynamicSupervisor, name: __MODULE__)
   end
 
   @spec start_database(String.t(), String.t()) :: {:ok, pid()} | {:error, term()}
   def start_database(database_id, file_path) do
     spec = {Server, database_id: database_id, file_path: file_path}
 
-    case DynamicSupervisor.start_child(__MODULE__, spec) do
+    case DynamicSupervisor.start_child(partition_for(database_id), spec) do
       {:ok, pid} -> {:ok, pid}
       {:error, {:already_started, pid}} -> {:ok, pid}
       {:error, reason} -> {:error, reason}
@@ -32,5 +31,9 @@ defmodule Sqlites.DataPlane.Supervisor do
   @spec stop_database(String.t()) :: :ok
   def stop_database(database_id) do
     Server.stop(database_id)
+  end
+
+  defp partition_for(database_id) do
+    {:via, PartitionSupervisor, {__MODULE__, database_id}}
   end
 end
