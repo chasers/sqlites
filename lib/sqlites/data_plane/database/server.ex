@@ -74,7 +74,7 @@ defmodule Sqlites.DataPlane.Database.Server do
 
   @impl true
   def handle_continue(:register_replication, state) do
-    if state.database, do: Sqlites.DataPlane.Litestream.register(state.database)
+    if replicated?(state), do: Sqlites.DataPlane.Litestream.register(state.database)
     {:noreply, state, state.idle_ttl}
   end
 
@@ -85,7 +85,7 @@ defmodule Sqlites.DataPlane.Database.Server do
 
   @impl true
   def handle_info(:timeout, state) do
-    if state.database, do: Sqlites.DataPlane.Litestream.stop(state.file_path)
+    if replicated?(state), do: Sqlites.DataPlane.Litestream.stop(state.file_path)
     {:stop, :normal, state}
   end
 
@@ -97,6 +97,9 @@ defmodule Sqlites.DataPlane.Database.Server do
   def terminate(_reason, %{conn: conn}) do
     Sqlite3.close(conn)
   end
+
+  defp replicated?(%{database: %{litestream_enabled: true}}), do: true
+  defp replicated?(_state), do: false
 
   defp default_idle_ttl do
     Application.get_env(:sqlites, :database_idle_ttl, :timer.hours(1))

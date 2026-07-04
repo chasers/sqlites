@@ -43,6 +43,7 @@ defmodule Sqlites.FailoverTest do
   test "activation restores the litestream replica when the file is missing" do
     tenant = tenant_fixture()
     database = database_fixture(tenant)
+    {:ok, database} = ControlPlane.update_database_settings(database, %{litestream_enabled: true})
 
     data_dir = Application.fetch_env!(:sqlites, :data_dir)
     file_path = Path.join([data_dir, tenant.id, database.id <> ".db"])
@@ -81,6 +82,23 @@ defmodule Sqlites.FailoverTest do
 
     assert {:ok, %{rows: [["survived-failover"]]}} =
              DataPlane.query(database.id, "SELECT v FROM t")
+  end
+
+  test "activation for a non-replicated database falls back to its latest backup" do
+    tenant = tenant_fixture()
+    database = placed_database_fixture(tenant)
+
+    {:ok, _} = DataPlane.query(database.id, "CREATE TABLE t (v TEXT)")
+    {:ok, _} = DataPlane.query(database.id, "INSERT INTO t VALUES ('from-backup')")
+    {:ok, _backup} = Sqlites.Backups.trigger(database)
+    on_exit(fn -> Sqlites.Backups.delete_all(database) end)
+
+    :ok = DataPlane.Supervisor.stop_database(database.id)
+    File.rm!(database.file_path)
+    File.rm(database.file_path <> "-wal")
+    File.rm(database.file_path <> "-shm")
+
+    assert {:ok, %{rows: [["from-backup"]]}} = DataPlane.query(database.id, "SELECT v FROM t")
   end
 
   test "activation fails rather than starting from an empty file" do

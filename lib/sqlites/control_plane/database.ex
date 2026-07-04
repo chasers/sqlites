@@ -12,6 +12,7 @@ defmodule Sqlites.ControlPlane.Database do
     field :node, :string
     field :file_path, :string
     field :auth_token, :string, redact: true
+    field :litestream_enabled, :boolean, default: false
 
     belongs_to :tenant, Sqlites.ControlPlane.Tenant
 
@@ -20,7 +21,7 @@ defmodule Sqlites.ControlPlane.Database do
 
   def create_changeset(database, attrs) do
     database
-    |> cast(attrs, [:name, :tenant_id])
+    |> cast(attrs, [:name, :tenant_id, :litestream_enabled])
     |> validate_required([:name, :tenant_id])
     |> validate_format(:name, ~r/^[a-z0-9][a-z0-9_-]*$/)
     |> put_change(:auth_token, generate_auth_token())
@@ -36,5 +37,9 @@ defmodule Sqlites.ControlPlane.Database do
     database
     |> cast(attrs, [:status, :node, :file_path])
     |> validate_required([:status])
+  end
+
+  def settings_changeset(database, attrs) do
+    cast(database, attrs, [:litestream_enabled])
   end
 end

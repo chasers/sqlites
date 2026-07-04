@@ -24,6 +24,16 @@ defmodule SqlitesWeb.Api.DatabaseController do
     end
   end
 
+  def update(conn, %{"id" => id} = params) do
+    settings = Map.take(params, ["litestream_enabled"])
+
+    with {:ok, database} <- fetch_database(conn, id),
+         {:ok, database} <- ControlPlane.update_database_settings(database, settings),
+         :ok <- Sqlites.DataPlane.set_replication(database) do
+      render(conn, :show, database: database, include_token: true)
+    end
+  end
+
   def delete(conn, %{"id" => id}) do
     with {:ok, database} <- fetch_database(conn, id),
          {:ok, _database} <- Sqlites.remove_database(database) do

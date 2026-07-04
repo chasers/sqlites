@@ -14,6 +14,7 @@ defmodule SqlitesWeb.Api.DatabaseJSON do
       id: database.id,
       name: database.name,
       status: database.status,
+      litestream: database.litestream_enabled,
       created_at: database.inserted_at
     }
 

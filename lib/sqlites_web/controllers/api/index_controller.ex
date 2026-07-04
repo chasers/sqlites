@@ -42,6 +42,13 @@ defmodule SqlitesWeb.Api.IndexController do
           returns: "database with auth_token and ready-to-use connection strings"
         },
         %{method: "GET", path: "#{base}/v1/databases/:id", auth: "tenant api_key"},
+        %{
+          method: "PATCH",
+          path: "#{base}/v1/databases/:id",
+          auth: "tenant api_key",
+          body: %{litestream_enabled: true},
+          returns: "toggle continuous (litestream) replication for this database"
+        },
         %{method: "DELETE", path: "#{base}/v1/databases/:id", auth: "tenant api_key"},
         %{
           method: "POST",

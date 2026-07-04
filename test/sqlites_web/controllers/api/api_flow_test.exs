@@ -147,6 +147,27 @@ defmodule SqlitesWeb.Api.ApiFlowTest do
       assert body["data"] == []
     end
 
+    test "toggle continuous replication via PATCH", %{conn: conn} do
+      tenant = tenant_fixture()
+      database = placed_database_fixture(tenant)
+
+      body =
+        conn
+        |> authed(tenant.api_key)
+        |> patch(~p"/v1/databases/#{database.id}", %{"litestream_enabled" => true})
+        |> json_response(200)
+
+      assert body["data"]["litestream"] == true
+
+      body =
+        conn
+        |> authed(tenant.api_key)
+        |> patch(~p"/v1/databases/#{database.id}", %{"litestream_enabled" => false})
+        |> json_response(200)
+
+      assert body["data"]["litestream"] == false
+    end
+
     test "cannot touch another tenant's database", %{conn: conn} do
       tenant = tenant_fixture()
       other_tenant = tenant_fixture()

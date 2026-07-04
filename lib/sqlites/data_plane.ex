@@ -97,11 +97,48 @@ defmodule Sqlites.DataPlane do
       File.exists?(file_path) ->
         :ok
 
-      match?(:ok, Litestream.restore(database, file_path)) ->
+      database.litestream_enabled and match?(:ok, Litestream.restore(database, file_path)) ->
+        :ok
+
+      match?(:ok, restore_latest_backup(database)) ->
         :ok
 
       true ->
         {:error, :database_file_missing}
+    end
+  end
+
+  defp restore_latest_backup(%Database{file_path: file_path} = database) do
+    case Sqlites.Backups.list(database) do
+      [latest | _] -> Sqlites.ObjectStore.fetch_to_file(latest.object_key, file_path)
+      [] -> {:error, :no_backups}
+    end
+  end
+
+  @doc """
+  Applies a live replication toggle to a running server: registers or
+  stops litestream on the owning node. No-op when the server is cold —
+  activation applies the flag.
+  """
+  @spec set_replication(Database.t()) :: :ok
+  def set_replication(%Database{} = database) do
+    on_owner_node(database, :set_replication_locally, [database])
+  end
+
+  @spec set_replication_locally(Database.t()) :: :ok
+  def set_replication_locally(%Database{} = database) do
+    case Registry.whereis(database.id) do
+      pid when is_pid(pid) ->
+        if database.litestream_enabled do
+          Litestream.register(database)
+        else
+          Litestream.stop(database.file_path)
+        end
+
+        :ok
+
+      :undefined ->
+        :ok
     end
   end
 

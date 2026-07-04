@@ -44,7 +44,7 @@ defmodule SqlitesWeb.Router do
     patch "/tenant", TenantController, :update
     delete "/tenant", TenantController, :delete
 
-    resources "/databases", DatabaseController, only: [:index, :create, :show, :delete]
+    resources "/databases", DatabaseController, only: [:index, :create, :show, :update, :delete]
 
     get "/databases/:database_id/backups", BackupController, :index
     post "/databases/:database_id/backups", BackupController, :create

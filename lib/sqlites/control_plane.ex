@@ -120,6 +120,13 @@ defmodule Sqlites.ControlPlane do
     |> write_through(&ReadModel.put_database/1)
   end
 
+  def update_database_settings(%Database{} = database, attrs) do
+    database
+    |> Database.settings_changeset(attrs)
+    |> Repo.update()
+    |> write_through(&ReadModel.put_database/1)
+  end
+
   def mark_placed(%Database{} = database, node, file_path) do
     database
     |> Database.placement_changeset(%{

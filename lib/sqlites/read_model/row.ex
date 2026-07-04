@@ -6,7 +6,7 @@ defmodule Sqlites.ReadModel.Row do
 
   alias Sqlites.ControlPlane.{Database, Tenant}
 
-  @database_columns ~w(id tenant_id name status node file_path auth_token)
+  @database_columns ~w(id tenant_id name status node file_path auth_token litestream_enabled)
   @tenant_columns ~w(id name slug api_key)
 
   def database_columns, do: @database_columns
@@ -21,7 +21,8 @@ defmodule Sqlites.ReadModel.Row do
       status: status(Map.fetch!(values, "status")),
       node: Map.get(values, "node"),
       file_path: Map.get(values, "file_path"),
-      auth_token: Map.fetch!(values, "auth_token")
+      auth_token: Map.fetch!(values, "auth_token"),
+      litestream_enabled: boolean(Map.get(values, "litestream_enabled"))
     }
   end
 
@@ -34,6 +35,10 @@ defmodule Sqlites.ReadModel.Row do
       api_key: Map.fetch!(values, "api_key")
     }
   end
+
+  defp boolean("t"), do: true
+  defp boolean("true"), do: true
+  defp boolean(_), do: false
 
   defp status("pending"), do: :pending
   defp status("active"), do: :active
