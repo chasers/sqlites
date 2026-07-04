@@ -23,6 +23,7 @@ defmodule Sqlites do
   def remove_database(%Database{} = database) do
     with {:ok, database} <- ControlPlane.mark_deleting(database),
          :ok <- Infra.deprovision(database),
+         :ok <- Sqlites.Backups.delete_all(database),
          {:ok, database} <- DataPlane.remove_database(database) do
       {:ok, database}
     end

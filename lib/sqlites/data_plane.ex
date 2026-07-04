@@ -82,6 +82,62 @@ defmodule Sqlites.DataPlane do
     Supervisor.start_database(database.id, database.file_path)
   end
 
+  @doc """
+  Takes a consistent snapshot on the owning node (`VACUUM INTO` through
+  the single writer) and uploads it to the object store. Returns the
+  object key and size for the control plane to record.
+  """
+  @spec backup_database(Database.t(), String.t()) ::
+          {:ok, %{object_key: String.t(), size_bytes: non_neg_integer()}} | {:error, term()}
+  def backup_database(%Database{} = database, object_key) do
+    on_owner_node(database, :backup_database_locally, [database, object_key])
+  end
+
+  @spec backup_database_locally(Database.t(), String.t()) ::
+          {:ok, %{object_key: String.t(), size_bytes: non_neg_integer()}} | {:error, term()}
+  def backup_database_locally(%Database{} = database, object_key) do
+    snapshot_path =
+      Path.join(
+        System.tmp_dir!(),
+        "sqlites-backup-#{database.id}-#{System.unique_integer([:positive])}.db"
+      )
+
+    try do
+      with {:ok, _} <- Router.query(database.id, "VACUUM INTO ?", [snapshot_path]),
+           {:ok, size_bytes} <- Sqlites.ObjectStore.put_file(object_key, snapshot_path) do
+        {:ok, %{object_key: object_key, size_bytes: size_bytes}}
+      end
+    after
+      File.rm(snapshot_path)
+    end
+  end
+
+  @doc """
+  Fetches a backup artifact from the object store onto the owning node
+  and swaps it in through the drain/swap/restart path.
+  """
+  @spec restore_database(Database.t(), String.t()) :: :ok | {:error, term()}
+  def restore_database(%Database{} = database, object_key) do
+    on_owner_node(database, :restore_database_locally, [database, object_key])
+  end
+
+  @spec restore_database_locally(Database.t(), String.t()) :: :ok | {:error, term()}
+  def restore_database_locally(%Database{} = database, object_key) do
+    fetch_path =
+      Path.join(
+        System.tmp_dir!(),
+        "sqlites-restore-#{database.id}-#{System.unique_integer([:positive])}.db"
+      )
+
+    try do
+      with :ok <- Sqlites.ObjectStore.fetch_to_file(object_key, fetch_path) do
+        restore_from_file_locally(database, fetch_path)
+      end
+    after
+      File.rm(fetch_path)
+    end
+  end
+
   @spec restore_from_file(Database.t(), Path.t()) :: :ok | {:error, term()}
   def restore_from_file(%Database{} = database, backup_path) do
     on_owner_node(database, :restore_from_file_locally, [database, backup_path])

@@ -165,7 +165,7 @@ defmodule SqlitesWeb.Api.ApiFlowTest do
       database = placed_database_fixture(tenant)
       {:ok, _} = DataPlane.query(database.id, "CREATE TABLE t (v TEXT)")
       {:ok, _} = DataPlane.query(database.id, "INSERT INTO t VALUES ('keep')")
-      on_exit(fn -> Sqlites.Infra.Local.deprovision(database) end)
+      on_exit(fn -> Sqlites.Backups.delete_all(database) end)
 
       body =
         conn

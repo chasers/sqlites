@@ -82,6 +82,13 @@ if config_env() == :prod do
 
   config :sqlites, data_dir: System.get_env("DATA_DIR") || "/var/lib/sqlites/data"
 
+  config :sqlites, Sqlites.ObjectStore,
+    adapter: Sqlites.ObjectStore.S3,
+    bucket: System.get_env("S3_BUCKET") || "sqlites-replica",
+    access_key_id: System.get_env("S3_ACCESS_KEY_ID"),
+    secret_access_key: System.get_env("S3_SECRET_ACCESS_KEY"),
+    endpoint: System.get_env("S3_ENDPOINT")
+
   if gen_rpc_port = System.get_env("GEN_RPC_PORT") do
     config :gen_rpc, tcp_server_port: String.to_integer(gen_rpc_port)
   end

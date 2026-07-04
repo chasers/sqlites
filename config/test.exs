@@ -7,6 +7,8 @@ config :sqlites,
 
 config :sqlites, Sqlites.ReadModel, enabled: false
 
+config :sqlites, Sqlites.ObjectStore, adapter: Sqlites.ObjectStore.Local
+
 config :gen_rpc, tcp_server_port: 15369
 
 config :libcluster, topologies: []

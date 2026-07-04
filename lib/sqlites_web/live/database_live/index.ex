@@ -2,7 +2,6 @@ defmodule SqlitesWeb.DatabaseLive.Index do
   use SqlitesWeb, :live_view
 
   alias Sqlites.ControlPlane
-  alias Sqlites.Infra
 
   @impl true
   def mount(_params, session, socket) do
@@ -14,6 +13,7 @@ defmodule SqlitesWeb.DatabaseLive.Index do
          |> assign(:page_title, "Databases")
          |> assign(:new_database_form, to_form(%{"name" => ""}))
          |> assign(:revealed_database_id, nil)
+         |> assign(:backups, [])
          |> load_databases()}
 
       {:error, :unauthorized} ->
@@ -56,16 +56,48 @@ defmodule SqlitesWeb.DatabaseLive.Index do
     tenant = socket.assigns.tenant
 
     with database when not is_nil(database) <- ControlPlane.get_database(tenant, id),
-         {:ok, backup} <- Infra.trigger_backup(database) do
-      {:noreply, put_flash(socket, :info, "Backup #{backup.id} created")}
+         {:ok, backup} <- Sqlites.Backups.trigger(database) do
+      {:noreply,
+       socket
+       |> put_flash(:info, "Backup #{backup.id} created")
+       |> load_backups(database)}
     else
       _ -> {:noreply, put_flash(socket, :error, "Backup failed")}
     end
   end
 
+  def handle_event("restore", %{"id" => id, "backup-id" => backup_id}, socket) do
+    tenant = socket.assigns.tenant
+
+    with database when not is_nil(database) <- ControlPlane.get_database(tenant, id),
+         :ok <- Sqlites.Backups.restore(database, backup_id) do
+      {:noreply, put_flash(socket, :info, "Restored from backup #{backup_id}")}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Restore failed")}
+    end
+  end
+
   def handle_event("toggle_connection", %{"id" => id}, socket) do
-    revealed = if socket.assigns.revealed_database_id == id, do: nil, else: id
-    {:noreply, assign(socket, :revealed_database_id, revealed)}
+    if socket.assigns.revealed_database_id == id do
+      {:noreply, assign(socket, revealed_database_id: nil, backups: [])}
+    else
+      database = ControlPlane.get_database(socket.assigns.tenant, id)
+
+      {:noreply,
+       socket
+       |> assign(:revealed_database_id, id)
+       |> load_backups(database)}
+    end
+  end
+
+  defp load_backups(socket, nil), do: assign(socket, :backups, [])
+
+  defp load_backups(socket, database) do
+    if socket.assigns.revealed_database_id == database.id do
+      assign(socket, :backups, Sqlites.Backups.list(database))
+    else
+      socket
+    end
   end
 
   defp load_databases(socket) do
@@ -175,6 +207,28 @@ defmodule SqlitesWeb.DatabaseLive.Index do
                   <code class="block bg-base-300 rounded p-2 font-mono break-all">
                     {query_url(database)}
                   </code>
+                </div>
+                <div>
+                  <div class="text-xs text-base-content/60 mb-1">Backups</div>
+                  <p :if={@backups == []} class="text-xs text-base-content/50">
+                    No backups yet.
+                  </p>
+                  <ul class="space-y-1">
+                    <li :for={backup <- @backups} class="flex items-center justify-between gap-2">
+                      <span class="font-mono text-xs">
+                        {Calendar.strftime(backup.inserted_at, "%Y-%m-%d %H:%M:%S UTC")} · {backup.size_bytes} bytes
+                      </span>
+                      <button
+                        class="btn btn-ghost btn-xs"
+                        phx-click="restore"
+                        phx-value-id={database.id}
+                        phx-value-backup-id={backup.id}
+                        data-confirm="Restore this backup? Current data will be replaced."
+                      >
+                        Restore
+                      </button>
+                    </li>
+                  </ul>
                 </div>
               </div>
             </div>

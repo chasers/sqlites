@@ -65,7 +65,9 @@ defmodule Sqlites.MixProject do
       {:bandit, "~> 1.5"},
       {:syn, "~> 3.3"},
       {:gen_rpc, github: "emqx/gen_rpc", tag: "3.6.1"},
-      {:exqlite, "~> 0.30"}
+      {:exqlite, "~> 0.30"},
+      {:req, "~> 0.6", override: true},
+      {:req_s3, "~> 0.2"}
     ]
   end
 

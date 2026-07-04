@@ -16,6 +16,8 @@ config :sqlites,
 
 config :sqlites, Sqlites.ReadModel, enabled: true
 
+config :sqlites, Sqlites.ObjectStore, adapter: Sqlites.ObjectStore.S3
+
 # Configure the endpoint
 config :sqlites, SqlitesWeb.Endpoint,
   url: [host: "localhost"],

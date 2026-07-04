@@ -4,6 +4,8 @@ config :sqlites,
   data_dir: Path.expand("../.data", __DIR__),
   infra_adapter: Sqlites.Infra.Local
 
+config :sqlites, Sqlites.ObjectStore, adapter: Sqlites.ObjectStore.Local
+
 # Configure your database
 config :sqlites, Sqlites.Repo,
   username: "postgres",
