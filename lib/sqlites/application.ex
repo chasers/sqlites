@@ -9,15 +9,17 @@ defmodule Sqlites.Application do
   def start(_type, _args) do
     Sqlites.DataPlane.Registry.init()
 
-    children = [
-      SqlitesWeb.Telemetry,
-      Sqlites.Repo,
-      {Cluster.Supervisor, [cluster_topologies(), [name: Sqlites.ClusterSupervisor]]},
-      {Phoenix.PubSub, name: Sqlites.PubSub},
-      Sqlites.DataPlane.Supervisor,
-      Sqlites.DataPlane.Reconciler,
-      SqlitesWeb.Endpoint
-    ]
+    children =
+      [
+        SqlitesWeb.Telemetry,
+        Sqlites.Repo,
+        {Cluster.Supervisor, [cluster_topologies(), [name: Sqlites.ClusterSupervisor]]},
+        {Phoenix.PubSub, name: Sqlites.PubSub},
+        Sqlites.DataPlane.Supervisor,
+        Sqlites.DataPlane.Reconciler
+      ] ++
+        read_model_children() ++
+        [SqlitesWeb.Endpoint]
 
     # See https://elixir.hexdocs.pm/Supervisor.html
     # for other strategies and supported options
@@ -31,6 +33,14 @@ defmodule Sqlites.Application do
   def config_change(changed, _new, removed) do
     SqlitesWeb.Endpoint.config_change(changed, removed)
     :ok
+  end
+
+  defp read_model_children do
+    if Application.get_env(:sqlites, Sqlites.ReadModel, [])[:enabled] do
+      [{Sqlites.ReadModel, []}, Sqlites.ReadModel.Replication]
+    else
+      []
+    end
   end
 
   defp cluster_topologies do

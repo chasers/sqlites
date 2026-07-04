@@ -5,6 +5,8 @@ config :sqlites,
   infra_adapter: Sqlites.Infra.Local,
   reconcile_on_boot: false
 
+config :sqlites, Sqlites.ReadModel, enabled: false
+
 config :gen_rpc, tcp_server_port: 15369
 
 config :libcluster, topologies: []

@@ -14,6 +14,8 @@ config :sqlites,
   infra_adapter: Sqlites.Infra.Kubernetes,
   database_idle_ttl: :timer.hours(1)
 
+config :sqlites, Sqlites.ReadModel, enabled: true
+
 # Configure the endpoint
 config :sqlites, SqlitesWeb.Endpoint,
   url: [host: "localhost"],

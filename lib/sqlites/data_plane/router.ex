@@ -22,7 +22,7 @@ defmodule Sqlites.DataPlane.Router do
   end
 
   defp activate_and_query(database_id, sql, args) do
-    with %ControlPlane.Database{} = database <- ControlPlane.get_database(database_id),
+    with %ControlPlane.Database{} = database <- ControlPlane.lookup_database(database_id),
          {:ok, pid} <- Sqlites.DataPlane.activate_database(database) do
       dispatch(node(pid), database_id, sql, args)
     else
