@@ -59,8 +59,10 @@ files.
   at creation time. The server speaks a Hrana v1/v2 subset over
   WebSocket (`execute`, `batch`, `store_sql`, `named_args`,
   `describe`, `sequence`); the auth token identifies the database.
-  Interactive transactions (`BEGIN`) are rejected cleanly — statements
-  run in autocommit mode.
+  Interactive transactions work on this transport: `BEGIN` takes a
+  writer lease owned by the connection, bounded by the
+  `txn_timeout_ms` limit and auto-rolled-back on disconnect; other
+  connections fail fast with a busy error until it ends.
 - **Hrana over HTTP**: `POST /v2/pipeline` (stateless, batons
   unsupported) for `http://` libsql URLs and edge runtimes.
 - **Plain HTTP**: `POST /v1/databases/:id/query` with
@@ -94,6 +96,19 @@ is also how the dashboard shows connection strings. The last usable
 tenant key cannot be disabled or deleted. List endpoints
 cursor-paginate with `?after=<id>&limit=<n>` and return a `next`
 cursor.
+
+**Unattended failover**: the operator watches each node's pod
+readiness and metadb replication-slot activity; when both say a node
+is gone for longer than `AUTO_EVACUATE_WINDOW_SECONDS`, it inserts an
+`evacuate` request on the same `node_drains` bus that drains use, and
+the data plane reassigns the dead node's placement rows to survivors
+(cancelled at claim time if the node reconnected). A returning node
+is fenced: servers still running for re-placed databases are stopped
+without shipping. Inter-node traffic can run over TLS (`GEN_RPC_TLS`
+for query traffic, `DIST_TLS` for membership; per-node certs, see
+`scripts/gen-dev-certs.sh`). Each node exposes Prometheus metrics at
+`GET /metrics` (cluster-internal; alert conditions in
+[`docs/alerts.md`](docs/alerts.md)).
 
 **Durability** is an infrastructure concern owned by the Kubernetes
 operator in [`operator/`](operator/): PVC-backed data directories,

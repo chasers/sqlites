@@ -44,3 +44,4 @@ npm-debug.log
 # Editor/tooling state.
 /.elixir_ls/
 /.claude/settings.local.json
+deploy/overlays/kind/tls/

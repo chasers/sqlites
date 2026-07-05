@@ -33,6 +33,19 @@ defmodule Sqlites.DataPlane.Supervisor do
     Server.stop(database_id)
   end
 
+  @spec local_servers() :: [pid()]
+  def local_servers do
+    __MODULE__
+    |> PartitionSupervisor.which_children()
+    |> Enum.flat_map(fn {_id, partition, _type, _modules} ->
+      DynamicSupervisor.which_children(partition)
+    end)
+    |> Enum.flat_map(fn
+      {_id, pid, _type, _modules} when is_pid(pid) -> [pid]
+      _child -> []
+    end)
+  end
+
   defp partition_for(database_id) do
     {:via, PartitionSupervisor, {__MODULE__, database_id}}
   end

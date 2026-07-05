@@ -22,7 +22,9 @@ defmodule Sqlites.RateLimiter do
 
   def allow?(database_id, rps) when is_integer(rps) and rps > 0 do
     key = {database_id, System.system_time(:second)}
-    :ets.update_counter(@table, key, {2, 1}, {key, 0}) <= rps
+    allowed = :ets.update_counter(@table, key, {2, 1}, {key, 0}) <= rps
+    unless allowed, do: Sqlites.Telemetry.rate_limited()
+    allowed
   end
 
   @impl true

@@ -16,11 +16,16 @@ defmodule SqlitesWeb.Hrana.PipelineController do
     with {:ok, token} <- bearer_token(conn),
          {:ok, database} <- ControlPlane.authenticate_database_by_token(token),
          :ok <- check_baton(params) do
-      limits = Sqlites.Limits.resolve(database)
+      ctx = %{
+        database: database,
+        limits: Sqlites.Limits.resolve(database),
+        owner: nil,
+        allow_transactions: false
+      }
 
       {results, _sqls} =
         Enum.map_reduce(params["requests"] || [], %{}, fn request, sqls ->
-          handle_request(request, sqls, database, limits)
+          handle_request(request, sqls, ctx)
         end)
 
       json(conn, %{baton: nil, base_url: nil, results: results})
@@ -37,48 +42,48 @@ defmodule SqlitesWeb.Hrana.PipelineController do
     end
   end
 
-  defp handle_request(%{"type" => "store_sql", "sql_id" => sql_id, "sql" => sql}, sqls, _db, _l) do
+  defp handle_request(%{"type" => "store_sql", "sql_id" => sql_id, "sql" => sql}, sqls, _ctx) do
     {ok(%{type: "store_sql"}), Map.put(sqls, sql_id, sql)}
   end
 
-  defp handle_request(%{"type" => "close_sql", "sql_id" => sql_id}, sqls, _db, _l) do
+  defp handle_request(%{"type" => "close_sql", "sql_id" => sql_id}, sqls, _ctx) do
     {ok(%{type: "close_sql"}), Map.delete(sqls, sql_id)}
   end
 
-  defp handle_request(%{"type" => "execute", "stmt" => stmt}, sqls, database, limits) do
-    case Stmt.execute(stmt, sqls, database, limits) do
+  defp handle_request(%{"type" => "execute", "stmt" => stmt}, sqls, ctx) do
+    case Stmt.execute(stmt, sqls, ctx) do
       {:ok, result} -> {ok(%{type: "execute", result: result}), sqls}
       {:error, message} -> {error(message), sqls}
     end
   end
 
-  defp handle_request(%{"type" => "batch", "batch" => batch}, sqls, database, limits) do
-    {ok(%{type: "batch", result: Stmt.batch(batch, sqls, database, limits)}), sqls}
+  defp handle_request(%{"type" => "batch", "batch" => batch}, sqls, ctx) do
+    {ok(%{type: "batch", result: Stmt.batch(batch, sqls, ctx)}), sqls}
   end
 
-  defp handle_request(%{"type" => "describe"} = request, sqls, database, limits) do
-    case Stmt.describe(request, sqls, database, limits) do
+  defp handle_request(%{"type" => "describe"} = request, sqls, ctx) do
+    case Stmt.describe(request, sqls, ctx) do
       {:ok, result} -> {ok(%{type: "describe", result: result}), sqls}
       {:error, message} -> {error(message), sqls}
     end
   end
 
-  defp handle_request(%{"type" => "sequence"} = request, sqls, database, limits) do
-    case Stmt.sequence(request, sqls, database, limits) do
+  defp handle_request(%{"type" => "sequence"} = request, sqls, ctx) do
+    case Stmt.sequence(request, sqls, ctx) do
       :ok -> {ok(%{type: "sequence"}), sqls}
       {:error, message} -> {error(message), sqls}
     end
   end
 
-  defp handle_request(%{"type" => "get_autocommit"}, sqls, _db, _l) do
+  defp handle_request(%{"type" => "get_autocommit"}, sqls, _ctx) do
     {ok(%{type: "get_autocommit", is_autocommit: true}), sqls}
   end
 
-  defp handle_request(%{"type" => "close"}, sqls, _db, _l) do
+  defp handle_request(%{"type" => "close"}, sqls, _ctx) do
     {ok(%{type: "close"}), sqls}
   end
 
-  defp handle_request(request, sqls, _db, _l) do
+  defp handle_request(request, sqls, _ctx) do
     {error("unsupported request type #{request["type"]}"), sqls}
   end
 

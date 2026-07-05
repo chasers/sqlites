@@ -98,10 +98,21 @@ defmodule Sqlites.DataPlane do
 
   defp ensure_local_file(%Database{} = database) do
     if local_file_current?(database) do
+      Sqlites.Telemetry.activation("cache_hit")
       :ok
     else
       discard_stale_local_file(database)
-      restore_for_activation(database)
+      started = System.monotonic_time(:millisecond)
+
+      case restore_for_activation(database) do
+        {:ok, path} ->
+          Sqlites.Telemetry.activation(path, System.monotonic_time(:millisecond) - started)
+          :ok
+
+        {:error, reason} ->
+          Sqlites.Telemetry.activation("missing")
+          {:error, reason}
+      end
     end
   end
 
@@ -127,12 +138,14 @@ defmodule Sqlites.DataPlane do
     cond do
       database.litestream_enabled and match?(:ok, Litestream.restore(database, file_path)) ->
         IdleSnapshots.write_local_generation(file_path, database.snapshot_generation || 0)
+        {:ok, "litestream"}
 
       match?(:ok, IdleSnapshots.restore(database, file_path)) ->
-        :ok
+        {:ok, "idle_snapshot"}
 
       match?(:ok, restore_latest_backup(database)) ->
         IdleSnapshots.write_local_generation(file_path, database.snapshot_generation || 0)
+        {:ok, "backup"}
 
       true ->
         {:error, :database_file_missing}
@@ -160,6 +173,29 @@ defmodule Sqlites.DataPlane do
   @spec idle_stop_database_locally(Database.t()) :: :ok
   def idle_stop_database_locally(%Database{} = database) do
     Sqlites.DataPlane.Database.Server.idle_stop(database.id)
+  end
+
+  @doc """
+  Pushes freshly resolved limits to a running server on its owning
+  node. No-op when the server is cold — activation resolves limits
+  itself. For internal tooling after editing a `limits` row:
+
+      bin/sqlites rpc 'Sqlites.ControlPlane.get_database("...") |> Sqlites.DataPlane.push_limits()'
+  """
+  @spec push_limits(Database.t()) :: :ok | {:error, term()}
+  def push_limits(%Database{} = database) do
+    on_owner_node(database, :push_limits_locally, [database])
+  end
+
+  @spec push_limits_locally(Database.t()) :: :ok | {:error, term()}
+  def push_limits_locally(%Database{} = database) do
+    case Registry.whereis(database.id) do
+      pid when is_pid(pid) ->
+        Sqlites.DataPlane.Database.Server.set_limits(pid, Sqlites.Limits.resolve(database))
+
+      :undefined ->
+        :ok
+    end
   end
 
   @doc """
@@ -302,21 +338,26 @@ defmodule Sqlites.DataPlane do
     :ok
   end
 
-  @spec query(String.t(), String.t(), [term()] | map(), timeout()) ::
+  @spec query(String.t(), String.t(), [term()] | map(), timeout(), pid() | nil) ::
           {:ok, Sqlites.DataPlane.Database.Server.query_result()} | {:error, term()}
-  def query(database_id, sql, args \\ [], timeout \\ :timer.seconds(30)) do
-    Router.query(database_id, sql, args, timeout)
+  def query(database_id, sql, args \\ [], timeout \\ :timer.seconds(30), owner \\ nil) do
+    Router.query(database_id, sql, args, timeout, owner)
   end
 
-  @spec describe(String.t(), String.t(), timeout()) ::
+  @spec describe(String.t(), String.t(), timeout(), pid() | nil) ::
           {:ok, Sqlites.DataPlane.Database.Server.describe_result()} | {:error, term()}
-  def describe(database_id, sql, timeout \\ :timer.seconds(30)) do
-    Router.describe(database_id, sql, timeout)
+  def describe(database_id, sql, timeout \\ :timer.seconds(30), owner \\ nil) do
+    Router.describe(database_id, sql, timeout, owner)
   end
 
-  @spec sequence(String.t(), String.t(), timeout()) :: :ok | {:error, term()}
-  def sequence(database_id, sql, timeout \\ :timer.seconds(30)) do
-    Router.sequence(database_id, sql, timeout)
+  @spec sequence(String.t(), String.t(), timeout(), pid() | nil) :: :ok | {:error, term()}
+  def sequence(database_id, sql, timeout \\ :timer.seconds(30), owner \\ nil) do
+    Router.sequence(database_id, sql, timeout, owner)
+  end
+
+  @spec autocommit?(String.t(), pid() | nil) :: boolean()
+  def autocommit?(database_id, owner) do
+    Router.autocommit?(database_id, owner)
   end
 
   @spec owner_node(String.t()) :: {:ok, node()} | {:error, :not_found}

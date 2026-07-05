@@ -8,3 +8,9 @@ config :sqlites_operator,
     database: System.get_env("METADB_DATABASE", "sqlites"),
     port: String.to_integer(System.get_env("METADB_PORT", "5432"))
   ]
+
+config :sqlites_operator,
+  auto_evacuate: [
+    enabled: System.get_env("AUTO_EVACUATE", "true") in ~w(true 1),
+    window_seconds: String.to_integer(System.get_env("AUTO_EVACUATE_WINDOW_SECONDS", "120"))
+  ]

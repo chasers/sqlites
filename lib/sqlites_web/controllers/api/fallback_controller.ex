@@ -65,6 +65,17 @@ defmodule SqlitesWeb.Api.FallbackController do
     |> json(%{error: %{code: "rate_limited", message: "database rate limit exceeded"}})
   end
 
+  def call(conn, {:error, :database_busy_in_transaction}) do
+    conn
+    |> put_status(:conflict)
+    |> json(%{
+      error: %{
+        code: "database_busy_in_transaction",
+        message: "database is locked by another connection's open transaction; retry shortly"
+      }
+    })
+  end
+
   def call(conn, {:error, :query_timeout}) do
     conn
     |> put_status(:request_timeout)

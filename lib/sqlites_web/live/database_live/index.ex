@@ -3,6 +3,8 @@ defmodule SqlitesWeb.DatabaseLive.Index do
 
   alias Sqlites.ControlPlane
 
+  @page_size 25
+
   @impl true
   def mount(_params, session, socket) do
     case authenticate(session) do
@@ -12,8 +14,10 @@ defmodule SqlitesWeb.DatabaseLive.Index do
          |> assign(:tenant, tenant)
          |> assign(:page_title, "Databases")
          |> assign(:new_database_form, to_form(%{"name" => ""}))
+         |> assign(:new_token_form, to_form(%{"name" => ""}))
          |> assign(:revealed_database_id, nil)
-         |> assign(:reveal_token, nil)
+         |> assign(:tokens, [])
+         |> assign(:revealed_secrets, %{})
          |> assign(:backups, [])
          |> load_databases()}
 
@@ -38,6 +42,10 @@ defmodule SqlitesWeb.DatabaseLive.Index do
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Create failed: #{inspect(reason)}")}
     end
+  end
+
+  def handle_event("load_more", _params, socket) do
+    {:noreply, load_databases(socket, socket.assigns.next)}
   end
 
   def handle_event("delete", %{"id" => id}, socket) do
@@ -80,30 +88,85 @@ defmodule SqlitesWeb.DatabaseLive.Index do
 
   def handle_event("toggle_connection", %{"id" => id}, socket) do
     if socket.assigns.revealed_database_id == id do
-      {:noreply, assign(socket, revealed_database_id: nil, reveal_token: nil, backups: [])}
+      {:noreply,
+       assign(socket, revealed_database_id: nil, tokens: [], revealed_secrets: %{}, backups: [])}
     else
       database = ControlPlane.get_database(socket.assigns.tenant, id)
 
       {:noreply,
        socket
        |> assign(:revealed_database_id, id)
-       |> assign(:reveal_token, usable_token(database))
+       |> assign(:revealed_secrets, %{})
+       |> load_tokens(database)
        |> load_backups(database)}
     end
   end
 
-  defp usable_token(nil), do: nil
+  def handle_event("create_token", %{"name" => name}, socket) do
+    attrs = if name == "", do: %{}, else: %{"name" => name}
 
-  defp usable_token(database) do
-    with %ControlPlane.DatabaseToken{} = token <-
-           database
-           |> ControlPlane.list_database_tokens()
-           |> Enum.find(&ControlPlane.token_usable?/1),
-         {:ok, revealed} <- ControlPlane.reveal(token) do
-      revealed
+    with %{} = database <- revealed_database(socket),
+         {:ok, token} <- ControlPlane.create_database_token(database, attrs) do
+      {:noreply,
+       socket
+       |> assign(:new_token_form, to_form(%{"name" => ""}))
+       |> assign(
+         :revealed_secrets,
+         Map.put(socket.assigns.revealed_secrets, token.id, token.token)
+       )
+       |> load_tokens(database)}
     else
-      _ -> nil
+      _ -> {:noreply, put_flash(socket, :error, "Token creation failed")}
     end
+  end
+
+  def handle_event("reveal_token", %{"token-id" => token_id}, socket) do
+    with %{} = database <- revealed_database(socket),
+         %{} = token <- ControlPlane.get_database_token(database, token_id),
+         {:ok, revealed} <- ControlPlane.reveal(token) do
+      {:noreply,
+       assign(
+         socket,
+         :revealed_secrets,
+         Map.put(socket.assigns.revealed_secrets, token.id, revealed.token)
+       )}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Reveal failed")}
+    end
+  end
+
+  def handle_event("toggle_token", %{"token-id" => token_id}, socket) do
+    with %{} = database <- revealed_database(socket),
+         %{} = token <- ControlPlane.get_database_token(database, token_id),
+         {:ok, _} <-
+           ControlPlane.update_database_token(token, %{"enabled" => not token.enabled}) do
+      {:noreply, load_tokens(socket, database)}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Update failed")}
+    end
+  end
+
+  def handle_event("delete_token", %{"token-id" => token_id}, socket) do
+    with %{} = database <- revealed_database(socket),
+         %{} = token <- ControlPlane.get_database_token(database, token_id),
+         {:ok, _} <- ControlPlane.delete_database_token(token) do
+      {:noreply, load_tokens(socket, database)}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Delete failed")}
+    end
+  end
+
+  defp revealed_database(socket) do
+    case socket.assigns.revealed_database_id do
+      nil -> nil
+      id -> ControlPlane.get_database(socket.assigns.tenant, id)
+    end
+  end
+
+  defp load_tokens(socket, nil), do: assign(socket, :tokens, [])
+
+  defp load_tokens(socket, database) do
+    assign(socket, :tokens, ControlPlane.list_database_tokens(database))
   end
 
   defp load_backups(socket, nil), do: assign(socket, :backups, [])
@@ -116,8 +179,23 @@ defmodule SqlitesWeb.DatabaseLive.Index do
     end
   end
 
-  defp load_databases(socket) do
-    assign(socket, :databases, ControlPlane.list_databases(socket.assigns.tenant))
+  defp load_databases(socket, after_id \\ nil) do
+    {:ok, page} =
+      ControlPlane.paginate_databases(socket.assigns.tenant,
+        limit: @page_size,
+        after: after_id
+      )
+
+    databases =
+      if after_id do
+        socket.assigns.databases ++ page.entries
+      else
+        page.entries
+      end
+
+    socket
+    |> assign(:databases, databases)
+    |> assign(:next, page.next)
   end
 
   defp authenticate(session) do
@@ -127,14 +205,20 @@ defmodule SqlitesWeb.DatabaseLive.Index do
     end
   end
 
-  defp connection_string(database, token) do
+  defp connection_string(database, secret) do
     host = SqlitesWeb.Endpoint.host()
     port = SqlitesWeb.Endpoint.url() |> URI.parse() |> Map.get(:port)
-    "libsql://#{host}:#{port}/#{database.id}?authToken=#{token.token}"
+    "libsql://#{host}:#{port}/#{database.id}?authToken=#{secret}"
   end
 
   defp query_url(database) do
     SqlitesWeb.Endpoint.url() <> "/v1/databases/#{database.id}/query"
+  end
+
+  defp first_revealed_secret(tokens, revealed_secrets) do
+    Enum.find_value(tokens, fn token ->
+      if ControlPlane.token_usable?(token), do: revealed_secrets[token.id]
+    end)
   end
 
   @impl true
@@ -145,7 +229,7 @@ defmodule SqlitesWeb.DatabaseLive.Index do
         <div class="flex items-center justify-between">
           <div>
             <h1 class="text-2xl font-bold">{@tenant.name}</h1>
-            <p class="text-sm text-base-content/60">{length(@databases)} database(s)</p>
+            <p class="text-sm text-base-content/60">{length(@databases)} database(s) loaded</p>
           </div>
           <form action={~p"/logout"} method="post">
             <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
@@ -209,19 +293,86 @@ defmodule SqlitesWeb.DatabaseLive.Index do
                   </button>
                 </div>
               </div>
-              <div :if={@revealed_database_id == database.id} class="space-y-2 text-sm">
-                <div :if={@reveal_token}>
+              <div :if={@revealed_database_id == database.id} class="space-y-3 text-sm">
+                <div>
+                  <div class="text-xs text-base-content/60 mb-1">Tokens</div>
+                  <ul class="space-y-1" id={"tokens-#{database.id}"}>
+                    <li
+                      :for={token <- @tokens}
+                      class="flex items-center justify-between gap-2 bg-base-300 rounded p-2"
+                    >
+                      <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                          <span class="font-mono text-xs">{token.name || "unnamed"}</span>
+                          <span class={[
+                            "badge badge-xs",
+                            (token.enabled && "badge-success") || "badge-error"
+                          ]}>
+                            {if(token.enabled, do: "enabled", else: "disabled")}
+                          </span>
+                          <span :if={token.expires_at} class="text-xs text-base-content/50">
+                            expires {Calendar.strftime(token.expires_at, "%Y-%m-%d %H:%M UTC")}
+                          </span>
+                        </div>
+                        <code
+                          :if={@revealed_secrets[token.id]}
+                          class="block font-mono text-xs break-all mt-1"
+                        >
+                          {@revealed_secrets[token.id]}
+                        </code>
+                      </div>
+                      <div class="flex gap-1 shrink-0">
+                        <button
+                          :if={is_nil(@revealed_secrets[token.id])}
+                          class="btn btn-ghost btn-xs"
+                          phx-click="reveal_token"
+                          phx-value-token-id={token.id}
+                        >
+                          Reveal
+                        </button>
+                        <button
+                          class="btn btn-ghost btn-xs"
+                          phx-click="toggle_token"
+                          phx-value-token-id={token.id}
+                        >
+                          {if(token.enabled, do: "Disable", else: "Enable")}
+                        </button>
+                        <button
+                          class="btn btn-ghost btn-xs text-error"
+                          phx-click="delete_token"
+                          phx-value-token-id={token.id}
+                          data-confirm="Delete this token? Clients using it lose access."
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </li>
+                  </ul>
+                  <.form
+                    for={@new_token_form}
+                    phx-submit="create_token"
+                    class="flex gap-2 mt-2"
+                    id={"new-token-#{database.id}"}
+                  >
+                    <input
+                      type="text"
+                      name="name"
+                      value={@new_token_form[:name].value}
+                      placeholder="token name (optional)"
+                      class="input input-bordered input-sm flex-1"
+                    />
+                    <button class="btn btn-sm">New token</button>
+                  </.form>
+                </div>
+                <div :if={secret = first_revealed_secret(@tokens, @revealed_secrets)}>
                   <div class="text-xs text-base-content/60 mb-1">libSQL connection string</div>
                   <code class="block bg-base-300 rounded p-2 font-mono break-all">
-                    {connection_string(database, @reveal_token)}
+                    {connection_string(database, secret)}
                   </code>
                 </div>
-                <p :if={is_nil(@reveal_token)} class="text-xs text-warning">
-                  No usable tokens — create one via POST /v1/databases/{database.id}/tokens.
-                </p>
                 <div>
                   <div class="text-xs text-base-content/60 mb-1">
-                    HTTP — POST with Authorization: Bearer &lt;auth_token&gt;
+                    HTTP — POST with Authorization: Bearer &lt;token&gt;
                   </div>
                   <code class="block bg-base-300 rounded p-2 font-mono break-all">
                     {query_url(database)}
@@ -251,6 +402,11 @@ defmodule SqlitesWeb.DatabaseLive.Index do
                 </div>
               </div>
             </div>
+          </div>
+          <div :if={@next} class="text-center">
+            <button class="btn btn-ghost btn-sm" phx-click="load_more" id="load-more">
+              Load more
+            </button>
           </div>
           <p :if={@databases == []} class="text-center text-base-content/50 py-8">
             No databases yet — create one above.

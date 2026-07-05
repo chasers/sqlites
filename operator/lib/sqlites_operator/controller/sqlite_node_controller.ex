@@ -15,6 +15,15 @@ defmodule SqlitesOperator.Controller.SqliteNodeController do
   on `status.drain`. Re-draining a node requires deleting its
   `node_drains` row. On delete, the node's replication slot is dropped
   so a decommissioned node can never bloat WAL retention.
+
+  Automatic failover: when two independent signals agree that a node
+  is gone — its pod not Ready for longer than the configured window
+  AND its replication slot inactive on the metadb — an `evacuate`
+  request is inserted on the same bus. The data plane worker re-checks
+  liveness at claim time, so a reconnected node cancels the request.
+  A completed evacuation row is cleared only once the pod is Ready
+  again, which is the flap-damping cooldown: at most one automatic
+  evacuation per node per outage.
   """
 
   use Bonny.ControllerV2
@@ -51,13 +60,119 @@ defmodule SqlitesOperator.Controller.SqliteNodeController do
   defp refresh_status(axn) do
     slot = slot_name(axn.resource)
     erlang_node = get_in(axn.resource, ["spec", "erlangNode"])
+    slot_status = slot_status(slot)
+    pod_ready = pod_ready?(axn)
+    not_ready_since = track_not_ready(axn, pod_ready)
+
+    handle_auto_failover(erlang_node, pod_ready, not_ready_since, slot_status)
 
     update_status(axn, fn status ->
       status
-      |> Map.put("replicationSlot", slot_status(slot))
+      |> Map.put("replicationSlot", slot_status)
       |> Map.put("databaseCount", database_count(erlang_node))
       |> Map.put("drain", drain_status(erlang_node))
+      |> Map.put("podReady", pod_ready)
+      |> Map.put("notReadySince", not_ready_since)
     end)
+  end
+
+  defp pod_ready?(axn) do
+    namespace = get_in(axn.resource, ["metadata", "namespace"]) || "sqlites"
+    ordinal = get_in(axn.resource, ["spec", "ordinal"])
+
+    with true <- is_integer(ordinal),
+         {:ok, pod} <-
+           K8s.Client.get("v1", "Pod", namespace: namespace, name: "sqlites-#{ordinal}")
+           |> K8s.Client.put_conn(axn.conn)
+           |> K8s.Client.run() do
+      pod
+      |> get_in(["status", "conditions"])
+      |> List.wrap()
+      |> Enum.any?(fn condition ->
+        condition["type"] == "Ready" and condition["status"] == "True"
+      end)
+    else
+      _ -> false
+    end
+  end
+
+  defp track_not_ready(_axn, true), do: nil
+
+  defp track_not_ready(axn, false) do
+    get_in(axn.resource, ["status", "notReadySince"]) ||
+      DateTime.to_iso8601(DateTime.utc_now())
+  end
+
+  defp handle_auto_failover(nil, _pod_ready, _not_ready_since, _slot_status), do: :ok
+
+  defp handle_auto_failover(erlang_node, true, _not_ready_since, _slot_status) do
+    clear_completed_evacuation(erlang_node)
+  end
+
+  defp handle_auto_failover(erlang_node, false, not_ready_since, slot_status) do
+    config = auto_evacuate_config()
+
+    if config.enabled and slot_inactive?(slot_status) and
+         down_longer_than?(not_ready_since, config.window_seconds) do
+      request_evacuation(erlang_node)
+    end
+
+    :ok
+  end
+
+  defp slot_inactive?(%{"active" => false}), do: true
+  defp slot_inactive?(_slot_status), do: false
+
+  defp down_longer_than?(nil, _window), do: false
+
+  defp down_longer_than?(not_ready_since, window_seconds) do
+    case DateTime.from_iso8601(not_ready_since) do
+      {:ok, since, _offset} ->
+        DateTime.diff(DateTime.utc_now(), since, :second) >= window_seconds
+
+      _ ->
+        false
+    end
+  end
+
+  defp request_evacuation(erlang_node) do
+    query = """
+    INSERT INTO node_drains (node, kind, requested_at)
+    VALUES ($1, 'evacuate', now()) ON CONFLICT (node) DO NOTHING
+    """
+
+    case metadb_query(query, [erlang_node]) do
+      {:ok, %{num_rows: 1}} -> Logger.warning("auto-evacuation requested for #{erlang_node}")
+      {:ok, _} -> :ok
+      {:error, reason} -> Logger.error("evacuation request insert failed: #{inspect(reason)}")
+    end
+  end
+
+  defp clear_completed_evacuation(erlang_node) do
+    query = """
+    DELETE FROM node_drains
+    WHERE node = $1 AND kind = 'evacuate' AND completed_at IS NOT NULL
+    """
+
+    case metadb_query(query, [erlang_node]) do
+      {:ok, %{num_rows: n}} when n > 0 ->
+        Logger.info("cleared completed evacuation for recovered node #{erlang_node}")
+
+      {:ok, _} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.error("evacuation cleanup failed: #{inspect(reason)}")
+    end
+  end
+
+  defp auto_evacuate_config do
+    config = Application.get_env(:sqlites_operator, :auto_evacuate, [])
+
+    %{
+      enabled: Keyword.get(config, :enabled, true),
+      window_seconds: Keyword.get(config, :window_seconds, 120)
+    }
   end
 
   defp ensure_drain_requested(axn) do

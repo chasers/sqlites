@@ -36,6 +36,8 @@ spec:
               containerPort: 9100
             - name: gen-rpc
               containerPort: 5369
+            - name: gen-rpc-tls
+              containerPort: 5870
           envFrom:
             - secretRef:
                 name: sqlites-env
@@ -63,6 +65,9 @@ spec:
               mountPath: /var/lib/sqlites/data
             - name: litestream-socket
               mountPath: /var/run/litestream
+            - name: gen-rpc-tls
+              mountPath: /etc/sqlites/gen-rpc-tls
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /v1
@@ -114,6 +119,10 @@ spec:
             name: litestream-config
         - name: litestream-socket
           emptyDir: {}
+        - name: gen-rpc-tls
+          secret:
+            secretName: sqlites-gen-rpc-tls
+            optional: true
   volumeClaimTemplates:
     - metadata:
         name: data

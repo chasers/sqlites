@@ -124,6 +124,34 @@ defmodule Sqlites.LimitsTest do
     end
   end
 
+  describe "push-to-hot" do
+    test "push_limits/1 applies a new size cap to a running server" do
+      tenant = tenant_fixture()
+      database = placed_database_fixture(tenant)
+
+      {:ok, _} = DataPlane.query(database.id, "CREATE TABLE t (v BLOB)")
+      {:ok, _} = DataPlane.query(database.id, "INSERT INTO t VALUES (randomblob(4096))")
+
+      {:ok, database} =
+        database
+        |> Ecto.Changeset.change(limits: %{"max_size_bytes" => 8_192})
+        |> Repo.update()
+
+      assert :ok = DataPlane.push_limits(database)
+
+      result =
+        Enum.reduce_while(1..16, :ok, fn _, _ ->
+          case DataPlane.query(database.id, "INSERT INTO t VALUES (randomblob(4096))") do
+            {:ok, _} -> {:cont, :ok}
+            {:error, message} -> {:halt, {:error, message}}
+          end
+        end)
+
+      assert {:error, message} = result
+      assert message =~ "full"
+    end
+  end
+
   describe "idle TTL and hot-hours" do
     test "idle_ttl_ms limit overrides the cluster default" do
       tenant = tenant_fixture()

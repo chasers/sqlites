@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  MIX_ENV: test
+
+jobs:
+  app:
+    name: App (compile, format, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Postgres (wal_level=logical)
+        run: |
+          docker run -d --name metadb \
+            -e POSTGRES_PASSWORD=postgres \
+            -p 5432:5432 \
+            postgres:16 -c wal_level=logical -c max_replication_slots=16
+          for _ in $(seq 1 30); do
+            docker exec metadb pg_isready -U postgres && break
+            sleep 1
+          done
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.18"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          restore-keys: mix-${{ runner.os }}-
+
+      - run: mix deps.get
+      - run: mix deps.unlock --check-unused
+      - run: mix compile --warnings-as-errors
+      - run: mix format --check-formatted
+      - run: mix ecto.create && mix ecto.migrate
+
+      - name: Unit + integration tests
+        run: mix test
+
+      - name: Distributed tests
+        run: |
+          epmd -daemon
+          mix test --include distributed --only distributed
+
+  operator:
+    name: Operator (compile, format)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: operator
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.18"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            operator/deps
+            operator/_build
+          key: mix-operator-${{ runner.os }}-${{ hashFiles('operator/mix.lock') }}
+          restore-keys: mix-operator-${{ runner.os }}-
+
+      - run: mix deps.get
+      - run: mix compile --warnings-as-errors
+      - run: mix format --check-formatted
+
+  migrations-immutable:
+    name: Committed migrations are immutable
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fail if a committed migration was modified or deleted
+        run: |
+          base="origin/${{ github.base_ref }}"
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          changed=$(git diff --diff-filter=MD --name-only "$base"...HEAD -- priv/repo/migrations)
+          if [ -n "$changed" ]; then
+            echo "Committed migrations were modified or deleted; write a new migration instead:"
+            echo "$changed"
+            exit 1
+          fi

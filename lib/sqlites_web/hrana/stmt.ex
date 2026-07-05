@@ -3,30 +3,41 @@ defmodule SqlitesWeb.Hrana.Stmt do
   Hrana statement execution shared by the WebSocket handler and the
   HTTP pipeline: SQL resolution (inline or stored `sql_id`), value
   decoding/encoding, positional and named args, and the per-database
-  edge checks (transaction-control rejection, rate limit, query
-  timeout) applied uniformly.
+  edge checks (rate limit, query timeout) applied uniformly.
+
+  The context map carries `database`, `limits`, `owner` (the writer
+  lease identity — the WebSocket process), and `allow_transactions`.
+  Transaction-control statements pass through to the server's writer
+  lease when allowed (the WebSocket path) and are rejected cleanly
+  when not (the stateless HTTP pipeline).
   """
 
   alias Sqlites.DataPlane
 
-  @transactions_message "interactive transactions (BEGIN/COMMIT/ROLLBACK/SAVEPOINT) are not " <>
-                          "supported; statements run in autocommit mode"
+  @type ctx :: %{
+          database: Sqlites.ControlPlane.Database.t(),
+          limits: Sqlites.Limits.t(),
+          owner: pid() | nil,
+          allow_transactions: boolean()
+        }
 
-  @spec execute(map(), map(), Sqlites.ControlPlane.Database.t(), Sqlites.Limits.t()) ::
-          {:ok, map()} | {:error, String.t()}
-  def execute(stmt, sqls, database, limits) do
+  @transactions_message "interactive transactions (BEGIN/COMMIT/ROLLBACK/SAVEPOINT) are not " <>
+                          "supported here; statements run in autocommit mode"
+
+  @spec execute(map(), map(), ctx()) :: {:ok, map()} | {:error, String.t()}
+  def execute(stmt, sqls, ctx) do
     with {:ok, sql} <- resolve_sql(stmt, sqls),
-         :ok <- check_statement(sql),
-         :ok <- check_rate_limit(database, limits),
+         :ok <- check_statement(sql, ctx),
+         :ok <- check_rate_limit(ctx),
          {:ok, args} <- decode_args(stmt) do
-      run(sql, args, database, limits)
+      run(sql, args, ctx)
     end
   end
 
-  @spec batch(map(), map(), Sqlites.ControlPlane.Database.t(), Sqlites.Limits.t()) :: map()
-  def batch(%{"steps" => steps}, sqls, database, limits) do
+  @spec batch(map(), map(), ctx()) :: map()
+  def batch(%{"steps" => steps}, sqls, ctx) do
     step_results =
-      Enum.map(steps, fn %{"stmt" => stmt} -> execute(stmt, sqls, database, limits) end)
+      Enum.map(steps, fn %{"stmt" => stmt} -> execute(stmt, sqls, ctx) end)
 
     %{
       step_results:
@@ -42,12 +53,11 @@ defmodule SqlitesWeb.Hrana.Stmt do
     }
   end
 
-  @spec describe(map(), map(), Sqlites.ControlPlane.Database.t(), Sqlites.Limits.t()) ::
-          {:ok, map()} | {:error, String.t()}
-  def describe(request, sqls, database, limits) do
+  @spec describe(map(), map(), ctx()) :: {:ok, map()} | {:error, String.t()}
+  def describe(request, sqls, ctx) do
     with {:ok, sql} <- resolve_sql(request, sqls),
-         :ok <- check_rate_limit(database, limits) do
-      case DataPlane.describe(database.id, sql, query_timeout(limits)) do
+         :ok <- check_rate_limit(ctx) do
+      case DataPlane.describe(ctx.database.id, sql, query_timeout(ctx.limits), ctx.owner) do
         {:ok, result} ->
           {:ok,
            %{
@@ -63,21 +73,20 @@ defmodule SqlitesWeb.Hrana.Stmt do
     end
   end
 
-  @spec sequence(map(), map(), Sqlites.ControlPlane.Database.t(), Sqlites.Limits.t()) ::
-          :ok | {:error, String.t()}
-  def sequence(request, sqls, database, limits) do
+  @spec sequence(map(), map(), ctx()) :: :ok | {:error, String.t()}
+  def sequence(request, sqls, ctx) do
     with {:ok, sql} <- resolve_sql(request, sqls),
-         :ok <- check_script(sql),
-         :ok <- check_rate_limit(database, limits) do
-      case DataPlane.sequence(database.id, sql, query_timeout(limits)) do
+         :ok <- check_script(sql, ctx),
+         :ok <- check_rate_limit(ctx) do
+      case DataPlane.sequence(ctx.database.id, sql, query_timeout(ctx.limits), ctx.owner) do
         :ok -> :ok
         {:error, reason} -> {:error, format_reason(reason)}
       end
     end
   end
 
-  defp run(sql, args, database, limits) do
-    case DataPlane.query(database.id, sql, args, query_timeout(limits)) do
+  defp run(sql, args, ctx) do
+    case DataPlane.query(ctx.database.id, sql, args, query_timeout(ctx.limits), ctx.owner) do
       {:ok, result} ->
         {:ok,
          %{
@@ -103,7 +112,9 @@ defmodule SqlitesWeb.Hrana.Stmt do
 
   defp resolve_sql(_request, _sqls), do: {:error, "stmt requires sql or sql_id"}
 
-  defp check_statement(sql) do
+  defp check_statement(_sql, %{allow_transactions: true}), do: :ok
+
+  defp check_statement(sql, _ctx) do
     if Sqlites.DataPlane.Sql.transaction_control?(sql) do
       {:error, @transactions_message}
     else
@@ -111,7 +122,9 @@ defmodule SqlitesWeb.Hrana.Stmt do
     end
   end
 
-  defp check_script(sql) do
+  defp check_script(_sql, %{allow_transactions: true}), do: :ok
+
+  defp check_script(sql, _ctx) do
     sql
     |> String.split(";")
     |> Enum.all?(fn segment -> not Sqlites.DataPlane.Sql.transaction_control?(segment) end)
@@ -121,8 +134,8 @@ defmodule SqlitesWeb.Hrana.Stmt do
     end
   end
 
-  defp check_rate_limit(database, limits) do
-    if Sqlites.RateLimiter.allow?(database.id, limits.rate_limit_rps) do
+  defp check_rate_limit(ctx) do
+    if Sqlites.RateLimiter.allow?(ctx.database.id, ctx.limits.rate_limit_rps) do
       :ok
     else
       {:error, "database rate limit exceeded"}
@@ -148,6 +161,10 @@ defmodule SqlitesWeb.Hrana.Stmt do
   end
 
   defp format_reason(:query_timeout), do: "query timed out"
+
+  defp format_reason(:database_busy_in_transaction),
+    do: "database is locked by another connection's open transaction; retry shortly"
+
   defp format_reason(reason) when is_binary(reason), do: reason
   defp format_reason(reason), do: inspect(reason)
 

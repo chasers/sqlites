@@ -15,6 +15,8 @@ defmodule Sqlites.Limits do
     * `query_timeout_ms` — caller-side query timeout
     * `statement_timeout_ms` — server-side interrupt of a running
       statement; nil = off
+    * `txn_timeout_ms` — idle-in-transaction cap on the writer lease
+      (auto-ROLLBACK when it fires)
     * `idle_ttl_ms` — overrides the cluster `:database_idle_ttl`
     * `max_hot_ms` — recycle a server after this long hot; nil = off
 
@@ -32,6 +34,7 @@ defmodule Sqlites.Limits do
     :rate_limit_rps,
     :query_timeout_ms,
     :statement_timeout_ms,
+    :txn_timeout_ms,
     :idle_ttl_ms,
     :max_hot_ms
   ]
@@ -42,6 +45,7 @@ defmodule Sqlites.Limits do
           rate_limit_rps: pos_integer() | nil,
           query_timeout_ms: pos_integer() | nil,
           statement_timeout_ms: pos_integer() | nil,
+          txn_timeout_ms: pos_integer() | nil,
           idle_ttl_ms: pos_integer() | nil,
           max_hot_ms: pos_integer() | nil
         }

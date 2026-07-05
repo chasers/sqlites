@@ -43,6 +43,10 @@ defmodule SqlitesWeb.Router do
     post "/pipeline", PipelineController, :create
   end
 
+  scope "/", SqlitesWeb do
+    get "/metrics", MetricsController, :index
+  end
+
   scope "/v1", SqlitesWeb.Api do
     pipe_through [:api, :api_authenticated]
 

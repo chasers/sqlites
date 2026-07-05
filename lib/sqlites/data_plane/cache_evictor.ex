@@ -74,6 +74,7 @@ defmodule Sqlites.DataPlane.CacheEvictor do
       )
     end
 
+    Sqlites.Telemetry.eviction_sweep(result.evicted, result.freed_bytes)
     result
   end
 

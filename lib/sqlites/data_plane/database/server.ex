@@ -13,6 +13,18 @@ defmodule Sqlites.DataPlane.Database.Server do
   shutdown (successful ship) the generation sidecar is touched last,
   so the cache evictor can prove the local file has no writes newer
   than the shipped snapshot.
+
+  Interactive transactions take a **writer lease**: when a statement
+  from an identified owner (the Hrana WebSocket connection) leaves the
+  connection in a transaction, that owner holds the lease and every
+  other caller fails fast with `:database_busy_in_transaction`. The
+  lease is exact — it follows `sqlite3_get_autocommit` via
+  `Sqlite3.transaction_status/1`, not SQL parsing — and is bounded by
+  the `txn_timeout_ms` limit (auto-ROLLBACK), the owner's death
+  (monitored, auto-ROLLBACK), and server shutdown (ROLLBACK before the
+  snapshot ships). A transaction left open by an ownerless caller is
+  rolled back immediately, so the shared connection can never leak
+  state.
   """
 
   use GenServer, restart: :transient
@@ -40,29 +52,52 @@ defmodule Sqlites.DataPlane.Database.Server do
 
   @type describe_result :: %{columns: [String.t()], param_count: non_neg_integer()}
 
-  @spec query(pid() | String.t(), String.t(), [term()] | map(), timeout()) ::
+  @spec query(pid() | String.t(), String.t(), [term()] | map(), timeout(), pid() | nil) ::
           {:ok, query_result()} | {:error, term()}
-  def query(server, sql, args \\ [], timeout \\ @default_query_timeout) do
-    call(server, {:query, sql, args}, timeout)
+  def query(server, sql, args \\ [], timeout \\ @default_query_timeout, owner \\ nil) do
+    call(server, {:query, sql, args, owner}, timeout)
   end
 
   @doc """
   Prepares without executing: column names and bound-parameter count,
   for Hrana `describe`.
   """
-  @spec describe(pid() | String.t(), String.t(), timeout()) ::
+  @spec describe(pid() | String.t(), String.t(), timeout(), pid() | nil) ::
           {:ok, describe_result()} | {:error, term()}
-  def describe(server, sql, timeout \\ @default_query_timeout) do
-    call(server, {:describe, sql}, timeout)
+  def describe(server, sql, timeout \\ @default_query_timeout, owner \\ nil) do
+    call(server, {:describe, sql, owner}, timeout)
   end
 
   @doc """
   Executes a multi-statement SQL script (Hrana `sequence`); no results
   are returned. Always marks the session dirty.
   """
-  @spec sequence(pid() | String.t(), String.t(), timeout()) :: :ok | {:error, term()}
-  def sequence(server, sql, timeout \\ @default_query_timeout) do
-    call(server, {:sequence, sql}, timeout)
+  @spec sequence(pid() | String.t(), String.t(), timeout(), pid() | nil) ::
+          :ok | {:error, term()}
+  def sequence(server, sql, timeout \\ @default_query_timeout, owner \\ nil) do
+    call(server, {:sequence, sql, owner}, timeout)
+  end
+
+  @doc """
+  Whether the connection is in autocommit mode from `owner`'s point of
+  view: false only while `owner` itself holds the writer lease.
+  """
+  @spec autocommit?(pid() | String.t(), pid() | nil, timeout()) :: boolean()
+  def autocommit?(server, owner, timeout \\ @default_query_timeout) do
+    case call(server, {:autocommit?, owner}, timeout) do
+      value when is_boolean(value) -> value
+      {:error, _reason} -> true
+    end
+  end
+
+  @doc """
+  Applies freshly resolved limits to a running server (push-to-hot):
+  the size cap re-applies immediately, the idle TTL takes effect from
+  the next statement. `max_hot_ms` stays as armed at activation.
+  """
+  @spec set_limits(pid() | String.t(), Sqlites.Limits.t()) :: :ok | {:error, term()}
+  def set_limits(server, limits) do
+    call(server, {:set_limits, limits}, @default_query_timeout)
   end
 
   defp call(pid, request, timeout) when is_pid(pid) do
@@ -80,6 +115,13 @@ defmodule Sqlites.DataPlane.Database.Server do
     :exit, {:normal, {GenServer, :call, _}} -> {:error, :database_not_running}
     :exit, {:noproc, {GenServer, :call, _}} -> {:error, :database_not_running}
     :exit, {{:shutdown, _}, {GenServer, :call, _}} -> {:error, :database_not_running}
+  end
+
+  @spec database_id(pid()) :: {:ok, String.t()} | {:error, term()}
+  def database_id(pid) when is_pid(pid) do
+    {:ok, GenServer.call(pid, :database_id, :timer.seconds(5))}
+  catch
+    :exit, _reason -> {:error, :unavailable}
   end
 
   @spec stop(String.t()) :: :ok
@@ -135,7 +177,10 @@ defmodule Sqlites.DataPlane.Database.Server do
           limits: limits,
           database: Keyword.get(opts, :database),
           dirty: true,
-          clean_shutdown: false
+          clean_shutdown: false,
+          txn_owner: nil,
+          txn_timer: nil,
+          txn_monitor: nil
         }
 
         {:ok, state, {:continue, :register_replication}}
@@ -152,19 +197,52 @@ defmodule Sqlites.DataPlane.Database.Server do
   end
 
   @impl true
-  def handle_call({:query, sql, args}, _from, state) do
-    {:reply, run_query_with_cap(state, sql, args), state, state.idle_ttl}
-  end
-
-  def handle_call({:describe, sql}, _from, state) do
-    {:reply, describe_statement(state.conn, sql), state, state.idle_ttl}
-  end
-
-  def handle_call({:sequence, sql}, _from, state) do
-    case Sqlite3.execute(state.conn, sql) do
-      :ok -> {:reply, :ok, state, state.idle_ttl}
-      {:error, reason} -> {:reply, {:error, format_error(reason)}, state, state.idle_ttl}
+  def handle_call({:query, sql, args, owner}, _from, state) do
+    if lease_blocks?(state, owner) do
+      {:reply, {:error, :database_busy_in_transaction}, state, state.idle_ttl}
+    else
+      result = run_query_with_cap(state, sql, args)
+      state = sync_lease(state, owner)
+      {:reply, result, state, state.idle_ttl}
     end
+  end
+
+  def handle_call({:describe, sql, owner}, _from, state) do
+    if lease_blocks?(state, owner) do
+      {:reply, {:error, :database_busy_in_transaction}, state, state.idle_ttl}
+    else
+      {:reply, describe_statement(state.conn, sql), state, state.idle_ttl}
+    end
+  end
+
+  def handle_call({:sequence, sql, owner}, _from, state) do
+    if lease_blocks?(state, owner) do
+      {:reply, {:error, :database_busy_in_transaction}, state, state.idle_ttl}
+    else
+      result =
+        case Sqlite3.execute(state.conn, sql) do
+          :ok -> :ok
+          {:error, reason} -> {:error, format_error(reason)}
+        end
+
+      state = sync_lease(state, owner)
+      {:reply, result, state, state.idle_ttl}
+    end
+  end
+
+  def handle_call({:autocommit?, owner}, _from, state) do
+    {:reply, state.txn_owner == nil or state.txn_owner != owner, state, state.idle_ttl}
+  end
+
+  def handle_call(:database_id, _from, state) do
+    {:reply, state.database_id, state, state.idle_ttl}
+  end
+
+  def handle_call({:set_limits, limits}, _from, state) do
+    :ok = apply_max_size(state.conn, limits.max_size_bytes)
+    idle_ttl = limits.idle_ttl_ms || default_idle_ttl()
+    state = %{state | limits: limits, idle_ttl: idle_ttl}
+    {:reply, :ok, state, state.idle_ttl}
   end
 
   def handle_call(:idle_stop, _from, state) do
@@ -180,6 +258,16 @@ defmodule Sqlites.DataPlane.Database.Server do
     {:stop, :normal, shutdown(state)}
   end
 
+  def handle_info({:txn_timeout, timer}, %{txn_timer: timer} = state) do
+    Logger.warning("transaction lease on #{state.database_id} timed out; rolling back")
+    {:noreply, rollback_lease(state), state.idle_ttl}
+  end
+
+  def handle_info({:DOWN, monitor, :process, _pid, _reason}, %{txn_monitor: monitor} = state) do
+    Logger.warning("transaction owner on #{state.database_id} died; rolling back")
+    {:noreply, rollback_lease(state), state.idle_ttl}
+  end
+
   def handle_info(_message, state) do
     {:noreply, state, state.idle_ttl}
   end
@@ -191,17 +279,70 @@ defmodule Sqlites.DataPlane.Database.Server do
   end
 
   defp shutdown(state) do
+    state = rollback_lease(state)
     state = ship_if_needed(state)
     if replicated?(state), do: Sqlites.DataPlane.Litestream.stop(state.file_path)
     %{state | clean_shutdown: not state.dirty}
   end
 
+  defp lease_blocks?(%{txn_owner: nil}, _owner), do: false
+  defp lease_blocks?(%{txn_owner: owner}, owner), do: false
+  defp lease_blocks?(_state, _owner), do: true
+
+  defp sync_lease(state, owner) do
+    case Sqlite3.transaction_status(state.conn) do
+      {:ok, :transaction} when is_pid(owner) -> renew_lease(state, owner)
+      {:ok, :transaction} -> rollback_lease(%{state | txn_owner: :ownerless})
+      {:ok, :idle} -> release_lease(state)
+    end
+  end
+
+  defp renew_lease(state, owner) do
+    monitor =
+      if state.txn_owner == owner do
+        state.txn_monitor
+      else
+        Process.monitor(owner)
+      end
+
+    timeout = state.limits.txn_timeout_ms || :timer.seconds(5)
+    timer = make_ref()
+    Process.send_after(self(), {:txn_timeout, timer}, timeout)
+
+    %{state | txn_owner: owner, txn_timer: timer, txn_monitor: monitor}
+  end
+
+  defp rollback_lease(%{txn_owner: nil} = state), do: state
+
+  defp rollback_lease(state) do
+    case Sqlite3.transaction_status(state.conn) do
+      {:ok, :transaction} -> run_query(state.conn, "ROLLBACK", [])
+      {:ok, :idle} -> :ok
+    end
+
+    release_lease(state)
+  end
+
+  defp release_lease(%{txn_owner: nil} = state), do: state
+
+  defp release_lease(state) do
+    if is_reference(state.txn_monitor) do
+      Process.demonitor(state.txn_monitor, [:flush])
+    end
+
+    %{state | txn_owner: nil, txn_timer: nil, txn_monitor: nil}
+  end
+
   defp ship_if_needed(%{database: %Database{}} = state) do
+    started = System.monotonic_time(:millisecond)
+
     case ship_snapshot(state) do
       {:ok, updated} ->
+        Sqlites.Telemetry.ship(System.monotonic_time(:millisecond) - started, :ok)
         %{state | dirty: false, database: updated}
 
       {:error, reason} ->
+        Sqlites.Telemetry.ship(System.monotonic_time(:millisecond) - started, :error)
         Logger.warning("idle snapshot ship failed for #{state.database_id}: #{inspect(reason)}")
 
         state

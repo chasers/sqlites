@@ -11,12 +11,51 @@ defmodule SqlitesWeb.Telemetry do
     children = [
       # Telemetry poller will execute the given period measurements
       # every 10_000ms. Learn more here: https://telemetry-metrics.hexdocs.pm
-      {:telemetry_poller, measurements: periodic_measurements(), period: 10_000}
-      # Add reporters as children of your supervision tree.
-      # {Telemetry.Metrics.ConsoleReporter, metrics: metrics()}
+      {:telemetry_poller, measurements: periodic_measurements(), period: 10_000},
+      {TelemetryMetricsPrometheus.Core, metrics: prometheus_metrics(), name: :sqlites_prometheus}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  @doc """
+  Metrics aggregated for the Prometheus endpoint (`GET /metrics`).
+  Alert conditions built on these are listed in `docs/alerts.md`.
+  """
+  def prometheus_metrics do
+    query_buckets = [1, 5, 10, 25, 50, 100, 250, 500, 1_000, 5_000, 30_000]
+    transfer_buckets = [10, 50, 100, 250, 500, 1_000, 2_500, 5_000, 15_000, 60_000]
+
+    [
+      last_value("sqlites.hot_servers.count",
+        description: "Database servers currently hot on this node"
+      ),
+      counter("sqlites.query.count", tags: [:result, :remote]),
+      distribution("sqlites.query.duration_ms",
+        tags: [:result],
+        reporter_options: [buckets: query_buckets]
+      ),
+      counter("sqlites.activation.count", tags: [:path]),
+      distribution("sqlites.activation.duration_ms",
+        tags: [:path],
+        reporter_options: [buckets: transfer_buckets]
+      ),
+      counter("sqlites.idle_snapshot.ship.count", tags: [:result]),
+      distribution("sqlites.idle_snapshot.ship.duration_ms",
+        tags: [:result],
+        reporter_options: [buckets: transfer_buckets]
+      ),
+      sum("sqlites.cache_evictor.sweep.evicted"),
+      sum("sqlites.cache_evictor.sweep.freed_bytes"),
+      counter("sqlites.node_operation.count", tags: [:kind, :result]),
+      counter("sqlites.rate_limiter.rejected.count"),
+      counter("sqlites.fence.stopped.count"),
+      distribution("phoenix.router_dispatch.stop.duration",
+        tags: [:route],
+        unit: {:native, :millisecond},
+        reporter_options: [buckets: query_buckets]
+      )
+    ]
   end
 
   def metrics do
@@ -85,9 +124,7 @@ defmodule SqlitesWeb.Telemetry do
 
   defp periodic_measurements do
     [
-      # A module, function and arguments to be invoked periodically.
-      # This function must call :telemetry.execute/3 and a metric must be added above.
-      # {SqlitesWeb, :count_users, []}
+      {Sqlites.Telemetry, :emit_hot_servers, []}
     ]
   end
 end

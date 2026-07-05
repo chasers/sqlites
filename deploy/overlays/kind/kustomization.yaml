@@ -10,6 +10,7 @@ resources:
 
 patches:
   - path: resources-patch.yaml
+  - path: operator-patch.yaml
 
 images:
   - name: sqlites
@@ -32,6 +33,19 @@ secretGenerator:
       - S3_ENDPOINT=http://minio:9000
       - S3_BUCKET=sqlites-replica
       - LITESTREAM_REPLICA_URL_PREFIX=s3://sqlites-replica.minio:9000/litestream
+      - GEN_RPC_TLS=true
+      - DIST_TLS=true
+
+  - name: sqlites-gen-rpc-tls
+    namespace: sqlites
+    files:
+      - tls/ca.pem
+      - tls/sqlites-0.pem
+      - tls/sqlites-0.key
+      - tls/sqlites-1.pem
+      - tls/sqlites-1.key
+      - tls/sqlites-2.pem
+      - tls/sqlites-2.key
 
 generatorOptions:
   disableNameSuffixHash: true

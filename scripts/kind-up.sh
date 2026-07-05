@@ -12,6 +12,9 @@ if ! kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
   kind create cluster --config deploy/overlays/kind/kind-config.yaml
 fi
 
+echo "==> generating dev TLS certs"
+./scripts/gen-dev-certs.sh deploy/overlays/kind/tls
+
 echo "==> building images"
 docker build -t sqlites:dev .
 docker build -t sqlites-operator:dev operator/

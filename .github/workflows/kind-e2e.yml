@@ -1,0 +1,32 @@
+name: kind e2e
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  kind-smoke:
+    name: kind cluster smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: helm/kind-action@v1
+        with:
+          install_only: true
+
+      - name: Bring up the cluster
+        run: ./scripts/kind-up.sh
+
+      - name: Smoke test
+        run: ./scripts/kind-smoke.sh
+
+      - name: Dump diagnostics on failure
+        if: failure()
+        run: |
+          kubectl -n sqlites get pods -o wide || true
+          kubectl -n sqlites describe pods | tail -200 || true
+          kubectl -n sqlites logs sqlites-0 --tail=200 || true
+          kubectl -n sqlites get sqlitenodes -o yaml || true

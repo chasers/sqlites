@@ -21,6 +21,7 @@ defmodule Sqlites.Application do
       ] ++
         read_model_children() ++
         enabled_child(Sqlites.DataPlane.CacheEvictor) ++
+        enabled_child(Sqlites.DataPlane.Fence) ++
         enabled_child(Sqlites.Drain.Worker) ++
         [SqlitesWeb.Endpoint]
 

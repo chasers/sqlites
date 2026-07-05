@@ -45,7 +45,7 @@ defmodule SqlitesWeb.Hrana.SocketTest do
   setup do
     tenant = tenant_fixture()
     database = placed_database_fixture(tenant)
-    %{database: database}
+    %{tenant: tenant, database: database}
   end
 
   test "rejects a bad auth token" do
@@ -129,15 +129,163 @@ defmodule SqlitesWeb.Hrana.SocketTest do
     assert message =~ "syntax error"
   end
 
-  test "rejects BEGIN cleanly instead of leaking transaction state", %{database: database} do
-    state = connected_state(database)
+  describe "interactive transactions" do
+    test "BEGIN/COMMIT round-trips and toggles autocommit", %{database: database} do
+      state = connected_state(database)
+      {_response, state} = execute("CREATE TABLE t (v TEXT)", [], state)
 
-    {response, state} = execute("BEGIN", [], state)
-    assert %{"type" => "response_error", "error" => %{"message" => message}} = response
-    assert message =~ "transactions"
+      {response, state} =
+        send_message(%{type: "request", request_id: 9, request: %{type: "get_autocommit"}}, state)
 
-    {response, _state} = execute("SELECT 1", [], state)
-    assert %{"type" => "response_ok"} = response
+      assert %{"response" => %{"is_autocommit" => true}} = response
+
+      {response, state} = execute("BEGIN", [], state)
+      assert %{"type" => "response_ok"} = response
+
+      {response, state} =
+        send_message(%{type: "request", request_id: 9, request: %{type: "get_autocommit"}}, state)
+
+      assert %{"response" => %{"is_autocommit" => false}} = response
+
+      {_response, state} = execute("INSERT INTO t VALUES ('committed')", [], state)
+      {response, state} = execute("COMMIT", [], state)
+      assert %{"type" => "response_ok"} = response
+
+      {response, _state} = execute("SELECT v FROM t", [], state)
+      assert %{"response" => %{"result" => %{"rows" => [[%{"value" => "committed"}]]}}} = response
+    end
+
+    test "ROLLBACK discards the transaction's writes", %{database: database} do
+      state = connected_state(database)
+      {_response, state} = execute("CREATE TABLE t (v TEXT)", [], state)
+
+      {_response, state} = execute("BEGIN", [], state)
+      {_response, state} = execute("INSERT INTO t VALUES ('discarded')", [], state)
+      {response, state} = execute("ROLLBACK", [], state)
+      assert %{"type" => "response_ok"} = response
+
+      {response, _state} = execute("SELECT count(*) FROM t", [], state)
+      assert %{"response" => %{"result" => %{"rows" => [[%{"value" => "0"}]]}}} = response
+    end
+
+    test "another connection fails fast while the lease is held", %{database: database} do
+      state = connected_state(database)
+      {_response, state} = execute("CREATE TABLE t (v TEXT)", [], state)
+      {_response, state} = execute("BEGIN", [], state)
+      {_response, state} = execute("INSERT INTO t VALUES ('mine')", [], state)
+
+      other =
+        Task.async(fn ->
+          {:ok, other_state} = SqlitesWeb.Hrana.Socket.init([])
+
+          {:push, {:text, hello}, other_state} =
+            SqlitesWeb.Hrana.Socket.handle_in(
+              {Jason.encode!(%{type: "hello", jwt: database.auth_token}), opcode: :text},
+              other_state
+            )
+
+          assert %{"type" => "hello_ok"} = Jason.decode!(hello)
+
+          {:push, {:text, payload}, _other_state} =
+            SqlitesWeb.Hrana.Socket.handle_in(
+              {Jason.encode!(%{
+                 type: "request",
+                 request_id: 1,
+                 request: %{
+                   type: "execute",
+                   stream_id: 1,
+                   stmt: %{sql: "SELECT 1", want_rows: true}
+                 }
+               }), opcode: :text},
+              other_state
+            )
+
+          Jason.decode!(payload)
+        end)
+
+      response = Task.await(other)
+      assert %{"type" => "response_error", "error" => %{"message" => message}} = response
+      assert message =~ "open transaction"
+
+      {response, _state} = execute("COMMIT", [], state)
+      assert %{"type" => "response_ok"} = response
+    end
+
+    test "an abandoned transaction rolls back on the txn timeout", %{tenant: tenant} do
+      database = placed_database_fixture(tenant, %{}, limits: %{"txn_timeout_ms" => 100})
+      state = connected_state(database)
+
+      {_response, state} = execute("CREATE TABLE t (v TEXT)", [], state)
+      {_response, state} = execute("BEGIN", [], state)
+      {_response, state} = execute("INSERT INTO t VALUES ('abandoned')", [], state)
+
+      Process.sleep(200)
+
+      {response, state} = execute("COMMIT", [], state)
+      assert %{"type" => "response_error", "error" => %{"message" => message}} = response
+      assert message =~ "no transaction"
+
+      {response, _state} = execute("SELECT count(*) FROM t", [], state)
+      assert %{"response" => %{"result" => %{"rows" => [[%{"value" => "0"}]]}}} = response
+    end
+
+    test "the lease dies with its owner", %{database: database} do
+      state = connected_state(database)
+      {_response, _state} = execute("CREATE TABLE t (v TEXT)", [], state)
+
+      holder =
+        Task.async(fn ->
+          {:ok, other_state} = SqlitesWeb.Hrana.Socket.init([])
+
+          {:push, {:text, _hello}, other_state} =
+            SqlitesWeb.Hrana.Socket.handle_in(
+              {Jason.encode!(%{type: "hello", jwt: database.auth_token}), opcode: :text},
+              other_state
+            )
+
+          for sql <- ["BEGIN", "INSERT INTO t VALUES ('orphaned')"] do
+            {:push, {:text, payload}, _s} =
+              SqlitesWeb.Hrana.Socket.handle_in(
+                {Jason.encode!(%{
+                   type: "request",
+                   request_id: 1,
+                   request: %{
+                     type: "execute",
+                     stream_id: 1,
+                     stmt: %{sql: sql, want_rows: false}
+                   }
+                 }), opcode: :text},
+                other_state
+              )
+
+            assert %{"type" => "response_ok"} = Jason.decode!(payload)
+          end
+
+          :ok
+        end)
+
+      assert :ok = Task.await(holder)
+
+      wait_until(fn ->
+        {response, _} = execute("SELECT count(*) FROM t", [], connected_state(database))
+        match?(%{"type" => "response_ok"}, response)
+      end)
+
+      {response, _state} = execute("SELECT count(*) FROM t", [], connected_state(database))
+      assert %{"response" => %{"result" => %{"rows" => [[%{"value" => "0"}]]}}} = response
+    end
+  end
+
+  defp wait_until(fun, attempts \\ 50)
+  defp wait_until(fun, 0), do: assert(fun.())
+
+  defp wait_until(fun, attempts) do
+    if fun.() do
+      :ok
+    else
+      Process.sleep(20)
+      wait_until(fun, attempts - 1)
+    end
   end
 
   test "binds named args", %{database: database} do
@@ -248,7 +396,7 @@ defmodule SqlitesWeb.Hrana.SocketTest do
             batch: %{
               steps: [
                 %{stmt: %{sql: "CREATE TABLE b (v TEXT)", want_rows: false}},
-                %{stmt: %{sql: "BEGIN", want_rows: false}},
+                %{stmt: %{sql: "INSERT INTO nope VALUES ('x')", want_rows: false}},
                 %{stmt: %{sql: "INSERT INTO b VALUES ('x')", want_rows: false}}
               ]
             }
@@ -267,6 +415,6 @@ defmodule SqlitesWeb.Hrana.SocketTest do
              }
            } = response
 
-    assert message =~ "transactions"
+    assert message =~ "no such table"
   end
 end

@@ -22,6 +22,7 @@ config :sqlites, Sqlites.Limits,
   rate_limit_rps: nil,
   query_timeout_ms: 30_000,
   statement_timeout_ms: 30_000,
+  txn_timeout_ms: 5_000,
   idle_ttl_ms: nil,
   max_hot_ms: nil
 

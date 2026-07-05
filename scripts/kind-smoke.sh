@@ -100,4 +100,42 @@ echo "==> replication slots on metadb"
 kubectl exec -n sqlites postgres-0 -- psql -U postgres -d sqlites -c \
   "SELECT slot_name, active, wal_status FROM pg_replication_slots"
 
+
+echo "==> automatic failover: kill sqlites-2 and wait for auto-evacuation"
+KILL_NODE=$(kubectl exec -n sqlites sqlites-2 -- /app/bin/sqlites rpc 'IO.puts(Node.self())' | tail -1)
+BEFORE=$(kubectl exec -n sqlites postgres-0 -- psql -tA -U postgres -d sqlites -c \
+  "SELECT count(*) FROM databases WHERE node = '$KILL_NODE'")
+echo "databases on $KILL_NODE before: $BEFORE"
+
+kubectl -n sqlites scale statefulset sqlites --replicas=2
+
+for _ in $(seq 1 60); do
+  DONE=$(kubectl exec -n sqlites postgres-0 -- psql -tA -U postgres -d sqlites -c \
+    "SELECT count(*) FROM node_drains WHERE node = '$KILL_NODE' AND kind = 'evacuate' AND completed_at IS NOT NULL AND error IS NULL")
+  [ "$DONE" = "1" ] && break
+  sleep 5
+done
+[ "$DONE" = "1" ] || { echo "FAIL: auto-evacuation never completed"; exit 1; }
+
+REMAINING=$(kubectl exec -n sqlites postgres-0 -- psql -tA -U postgres -d sqlites -c \
+  "SELECT count(*) FROM databases WHERE node = '$KILL_NODE'")
+[ "$REMAINING" = "0" ] || { echo "FAIL: $REMAINING databases still on evacuated node"; exit 1; }
+
+ROW=$(curl -sf -X POST "$BASE/v1/databases/$MOVE_ID/query" \
+  -H "authorization: Bearer $MOVE_TOKEN" -H 'content-type: application/json' \
+  -d '{"sql":"SELECT v FROM t"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['data']['rows'][0][0])")
+[ "$ROW" = "moved-data" ] || { echo "FAIL: data unreachable after auto-evacuation"; exit 1; }
+
+echo "==> recovery: scale back up; evacuate row clears once the pod is Ready"
+kubectl -n sqlites scale statefulset sqlites --replicas=3
+kubectl -n sqlites rollout status statefulset sqlites --timeout=180s
+
+for _ in $(seq 1 24); do
+  LEFT=$(kubectl exec -n sqlites postgres-0 -- psql -tA -U postgres -d sqlites -c \
+    "SELECT count(*) FROM node_drains WHERE node = '$KILL_NODE'")
+  [ "$LEFT" = "0" ] && break
+  sleep 5
+done
+[ "$LEFT" = "0" ] || { echo "FAIL: completed evacuation row never cleared"; exit 1; }
+
 echo "SMOKE OK"

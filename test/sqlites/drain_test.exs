@@ -66,4 +66,43 @@ defmodule Sqlites.DrainTest do
     assert request.completed_at
     assert request.error =~ "no_survivors"
   end
+
+  test "worker evacuates a dead node's placement rows" do
+    tenant = tenant_fixture()
+    database = placed_database_fixture(tenant)
+
+    {:ok, _} =
+      database
+      |> ControlPlane.Database.placement_changeset(%{status: :active, node: "sqlites@dead"})
+      |> Repo.update()
+
+    Repo.insert!(%Request{
+      node: "sqlites@dead",
+      kind: "evacuate",
+      requested_at: DateTime.utc_now()
+    })
+
+    assert :ok = Sqlites.Drain.Worker.poll()
+
+    request = Repo.get!(Request, "sqlites@dead")
+    assert request.completed_at
+    assert request.reassigned == 1
+    assert request.error == nil
+
+    assert ControlPlane.get_database(database.id).node == to_string(Node.self())
+  end
+
+  test "worker cancels an evacuation when the node is connected" do
+    Repo.insert!(%Request{
+      node: to_string(Node.self()),
+      kind: "evacuate",
+      requested_at: DateTime.utc_now()
+    })
+
+    assert :ok = Sqlites.Drain.Worker.poll()
+
+    request = Repo.get!(Request, to_string(Node.self()))
+    assert request.completed_at
+    assert request.error =~ "reconnected"
+  end
 end

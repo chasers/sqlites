@@ -8,6 +8,12 @@ defmodule SqlitesWeb.Hrana.Socket do
   Statements are routed to the owning node through `Sqlites.DataPlane`;
   execution itself lives in `SqlitesWeb.Hrana.Stmt`, shared with the
   HTTP pipeline.
+
+  Interactive transactions are supported on this transport: `BEGIN`
+  takes the database's writer lease with this socket process as the
+  owner. The lease is bounded by the `txn_timeout_ms` limit and rolls
+  back automatically if this socket dies — see
+  `Sqlites.DataPlane.Database.Server`.
   """
 
   @behaviour WebSock
@@ -88,30 +94,31 @@ defmodule SqlitesWeb.Hrana.Socket do
   end
 
   defp handle_request(%{"type" => "get_autocommit"}, request_id, state) do
-    respond_ok(request_id, %{type: "get_autocommit", is_autocommit: true}, state)
+    is_autocommit = Sqlites.DataPlane.autocommit?(state.database.id, self())
+    respond_ok(request_id, %{type: "get_autocommit", is_autocommit: is_autocommit}, state)
   end
 
   defp handle_request(%{"type" => "execute", "stmt" => stmt}, request_id, state) do
-    case Stmt.execute(stmt, state.sqls, state.database, state.limits) do
+    case Stmt.execute(stmt, state.sqls, ctx(state)) do
       {:ok, result} -> respond_ok(request_id, %{type: "execute", result: result}, state)
       {:error, message} -> request_error(request_id, message, state)
     end
   end
 
   defp handle_request(%{"type" => "batch", "batch" => batch}, request_id, state) do
-    result = Stmt.batch(batch, state.sqls, state.database, state.limits)
+    result = Stmt.batch(batch, state.sqls, ctx(state))
     respond_ok(request_id, %{type: "batch", result: result}, state)
   end
 
   defp handle_request(%{"type" => "describe"} = request, request_id, state) do
-    case Stmt.describe(request, state.sqls, state.database, state.limits) do
+    case Stmt.describe(request, state.sqls, ctx(state)) do
       {:ok, result} -> respond_ok(request_id, %{type: "describe", result: result}, state)
       {:error, message} -> request_error(request_id, message, state)
     end
   end
 
   defp handle_request(%{"type" => "sequence"} = request, request_id, state) do
-    case Stmt.sequence(request, state.sqls, state.database, state.limits) do
+    case Stmt.sequence(request, state.sqls, ctx(state)) do
       :ok -> respond_ok(request_id, %{type: "sequence"}, state)
       {:error, message} -> request_error(request_id, message, state)
     end
@@ -119,6 +126,15 @@ defmodule SqlitesWeb.Hrana.Socket do
 
   defp handle_request(request, request_id, state) do
     request_error(request_id, "unsupported request type #{request["type"]}", state)
+  end
+
+  defp ctx(state) do
+    %{
+      database: state.database,
+      limits: state.limits,
+      owner: self(),
+      allow_transactions: true
+    }
   end
 
   defp respond_ok(request_id, response, state) do
