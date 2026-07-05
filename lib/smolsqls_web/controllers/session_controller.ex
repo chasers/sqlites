@@ -22,11 +22,8 @@ defmodule SmolsqlsWeb.SessionController do
       {:ok, tenant} ->
         conn
         |> put_session(:api_key, tenant.api_key)
-        |> put_flash(
-          :info,
-          "Tenant created. Your API key (save it, it is shown only once): #{tenant.api_key}"
-        )
-        |> redirect(to: ~p"/dashboard")
+        |> put_flash(:info, "Account created. Reveal and copy your API key below to connect.")
+        |> redirect(to: ~p"/account")
 
       {:error, changeset} ->
         conn

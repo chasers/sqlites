@@ -231,10 +231,13 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
             <h1 class="text-2xl font-bold">{@tenant.name}</h1>
             <p class="text-sm text-base-content/60">{length(@databases)} database(s) loaded</p>
           </div>
-          <form action={~p"/logout"} method="post">
-            <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
-            <button class="btn btn-ghost btn-sm">Sign out</button>
-          </form>
+          <div class="flex items-center gap-2">
+            <.link navigate={~p"/account"} class="btn btn-ghost btn-sm">API keys</.link>
+            <form action={~p"/logout"} method="post">
+              <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
+              <button class="btn btn-ghost btn-sm">Sign out</button>
+            </form>
+          </div>
         </div>
 
         <div class="card bg-base-200">

@@ -27,6 +27,7 @@ defmodule SmolsqlsWeb.Router do
     post "/logout", SessionController, :delete
 
     live "/dashboard", DatabaseLive.Index, :index
+    live "/account", AccountLive.Index, :index
   end
 
   scope "/v1", SmolsqlsWeb.Api do
