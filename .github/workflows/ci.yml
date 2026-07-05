@@ -28,8 +28,8 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "27"
-          elixir-version: "1.18"
+          otp-version: "29.0.2"
+          elixir-version: "1.20.2"
 
       - uses: actions/cache@v4
         with:
@@ -64,8 +64,8 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "27"
-          elixir-version: "1.18"
+          otp-version: "29.0.2"
+          elixir-version: "1.20.2"
 
       - uses: actions/cache@v4
         with:
