@@ -17,6 +17,17 @@ defmodule SmolsqlsWeb.Api.IndexController do
           "connect with any libSQL client or plain HTTP. All management endpoints " <>
           "authenticate with 'Authorization: Bearer <tenant api_key>'; query endpoints " <>
           "authenticate with the per-database auth_token.",
+      response_format:
+        "Every successful (2xx) body is a JSON object {\"data\": <object>}; the fields " <>
+          "documented per endpoint live inside \"data\". List endpoints add a top-level " <>
+          "\"next\" cursor alongside \"data\" (null on the last page). Secrets and " <>
+          "connection strings (tenant \"api_key\", database \"auth_token\", " <>
+          "\"connections\") appear only in the create response's \"data\" and are never " <>
+          "echoed by later GETs.",
+      error_format:
+        "Errors (4xx/5xx) are {\"error\": {\"code\": <string>, \"message\": <string>}}. " <>
+          "Validation errors use {\"error\": {\"code\": \"validation_failed\", " <>
+          "\"details\": {<field>: [<message>]}}}.",
       endpoints: [
         %{
           method: "POST",
@@ -71,7 +82,9 @@ defmodule SmolsqlsWeb.Api.IndexController do
           path: "#{base}/v1/databases",
           auth: "tenant api_key",
           body: %{name: "my-task-db"},
-          returns: "database with auth_token and ready-to-use connection strings"
+          returns:
+            "database with auth_token and ready-to-use connection strings (under " <>
+              "data.connections) — returned only here, never by GET /databases/:id"
         },
         %{method: "GET", path: "#{base}/v1/databases/:id", auth: "tenant api_key"},
         %{

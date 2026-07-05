@@ -25,6 +25,8 @@ defmodule SmolsqlsWeb.Api.ApiFlowTest do
       body = conn |> get(~p"/v1") |> json_response(200)
       assert body["service"] == "smolsqls"
       assert is_list(body["endpoints"])
+      assert body["response_format"] =~ "data"
+      assert body["error_format"] =~ "validation_failed"
     end
   end
 
@@ -128,6 +130,16 @@ defmodule SmolsqlsWeb.Api.ApiFlowTest do
         |> json_response(200)
 
       assert result["data"]["rows"] == [["hello"]]
+
+      shown =
+        conn
+        |> authed(tenant.api_key)
+        |> get(~p"/v1/databases/#{db_id}")
+        |> json_response(200)
+
+      assert shown["data"]["litestream_enabled"] == false
+      refute Map.has_key?(shown["data"], "connections")
+      refute Map.has_key?(shown["data"], "auth_token")
     end
 
     test "query rejects the wrong token and bad SQL", %{conn: conn} do
@@ -172,7 +184,7 @@ defmodule SmolsqlsWeb.Api.ApiFlowTest do
         |> patch(~p"/v1/databases/#{database.id}", %{"litestream_enabled" => true})
         |> json_response(200)
 
-      assert body["data"]["litestream"] == true
+      assert body["data"]["litestream_enabled"] == true
 
       body =
         conn
@@ -180,7 +192,7 @@ defmodule SmolsqlsWeb.Api.ApiFlowTest do
         |> patch(~p"/v1/databases/#{database.id}", %{"litestream_enabled" => false})
         |> json_response(200)
 
-      assert body["data"]["litestream"] == false
+      assert body["data"]["litestream_enabled"] == false
     end
 
     test "cannot touch another tenant's database", %{conn: conn} do

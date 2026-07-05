@@ -119,7 +119,13 @@ test use `Smolsqls.Infra.Local` (backups via `VACUUM INTO`).
 
 ## Agent-friendly by design
 
-The full lifecycle is drivable over HTTP with no human steps:
+The full lifecycle is drivable over HTTP with no human steps. Every
+successful response is a JSON object `{"data": <object>}` (list
+endpoints add a top-level `next` cursor); errors are
+`{"error": {"code", "message"}}`. Secrets and connection strings
+(`api_key`, `auth_token`, `connections`) come back only in the create
+response and are never echoed by later reads — `GET /v1` documents the
+full contract.
 
 ```sh
 # discover the API
@@ -165,7 +171,7 @@ await client.execute("SELECT 1");
 
 ## Running locally
 
-Requires Erlang/OTP 27+, Elixir 1.18+, and Postgres on `localhost:5432`
+Requires Erlang/OTP 27+, Elixir 1.20+, and Postgres on `localhost:5432`
 (`postgres`/`postgres`).
 
 ```sh
