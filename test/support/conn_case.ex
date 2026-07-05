@@ -33,6 +33,7 @@ defmodule SmolsqlsWeb.ConnCase do
 
   setup tags do
     Smolsqls.DataCase.setup_sandbox(tags)
+    Smolsqls.SignupLimiter.reset()
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 end

@@ -65,6 +65,17 @@ defmodule SmolsqlsWeb.Api.FallbackController do
     |> json(%{error: %{code: "rate_limited", message: "database rate limit exceeded"}})
   end
 
+  def call(conn, {:error, :signup_rate_limited}) do
+    conn
+    |> put_status(:too_many_requests)
+    |> json(%{
+      error: %{
+        code: "signup_rate_limited",
+        message: "too many accounts created from this IP; try again later"
+      }
+    })
+  end
+
   def call(conn, {:error, :database_busy_in_transaction}) do
     conn
     |> put_status(:conflict)

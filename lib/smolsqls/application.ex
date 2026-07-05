@@ -16,6 +16,7 @@ defmodule Smolsqls.Application do
         {Cluster.Supervisor, [cluster_topologies(), [name: Smolsqls.ClusterSupervisor]]},
         {Phoenix.PubSub, name: Smolsqls.PubSub},
         Smolsqls.RateLimiter,
+        Smolsqls.SignupLimiter,
         Smolsqls.DataPlane.Supervisor,
         Smolsqls.DataPlane.Reconciler
       ] ++

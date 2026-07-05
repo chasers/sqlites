@@ -53,5 +53,20 @@
         </p>
       </div>
     </div>
+
+    <div class="card bg-base-200">
+      <div class="card-body space-y-2">
+        <h2 class="card-title">Platform limits</h2>
+        <p class="text-sm text-base-content/60">
+          What every account gets by default.
+        </p>
+        <ul class="text-sm text-base-content/80 divide-y divide-base-300">
+          <li :for={{label, value} <- @limits} class="flex justify-between gap-4 py-1.5">
+            <span>{label}</span>
+            <span class="font-mono">{value}</span>
+          </li>
+        </ul>
+      </div>
+    </div>
   </div>
 </Layouts.app>

@@ -46,6 +46,21 @@ defmodule SmolsqlsWeb.Api.ApiFlowTest do
 
       assert body["error"]["code"] == "validation_failed"
     end
+
+    test "rate-limits signups from one ip with 429", %{conn: conn} do
+      for _ <- 1..5 do
+        conn
+        |> post(~p"/v1/tenants", %{"name" => "Agent Org", "slug" => unique_slug()})
+        |> json_response(201)
+      end
+
+      body =
+        conn
+        |> post(~p"/v1/tenants", %{"name" => "Agent Org", "slug" => unique_slug()})
+        |> json_response(429)
+
+      assert body["error"]["code"] == "signup_rate_limited"
+    end
   end
 
   describe "tenant self-service" do

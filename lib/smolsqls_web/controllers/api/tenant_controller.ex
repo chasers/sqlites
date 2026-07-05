@@ -6,7 +6,8 @@ defmodule SmolsqlsWeb.Api.TenantController do
   action_fallback SmolsqlsWeb.Api.FallbackController
 
   def create(conn, params) do
-    with {:ok, tenant} <- ControlPlane.create_tenant(params) do
+    with {:ok, tenant} <-
+           ControlPlane.create_tenant(params, signup_ip: SmolsqlsWeb.ClientIP.get(conn)) do
       conn
       |> put_status(:created)
       |> render(:show, tenant: tenant, include_api_key: true)

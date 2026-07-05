@@ -26,6 +26,8 @@ config :smolsqls, Smolsqls.Limits,
   idle_ttl_ms: nil,
   max_hot_ms: nil
 
+config :smolsqls, :signup_rate_limit, max_per_ip: 5, window_hours: 24
+
 config :smolsqls, Smolsqls.ObjectStore, adapter: Smolsqls.ObjectStore.S3
 
 # Configure the endpoint

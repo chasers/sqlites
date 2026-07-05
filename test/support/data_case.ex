@@ -29,6 +29,7 @@ defmodule Smolsqls.DataCase do
 
   setup tags do
     Smolsqls.DataCase.setup_sandbox(tags)
+    Smolsqls.SignupLimiter.reset()
     :ok
   end
 

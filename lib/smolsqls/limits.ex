@@ -57,6 +57,15 @@ defmodule Smolsqls.Limits do
     Map.new(@keys, fn key -> {key, resolve_key(key, database, tenant)} end)
   end
 
+  @doc """
+  The cluster default limits from config, with no tenant or database
+  overrides applied — what a brand-new account gets.
+  """
+  @spec defaults() :: t()
+  def defaults do
+    Map.new(@keys, fn key -> {key, default(key)} end)
+  end
+
   @spec max_databases(Tenant.t()) :: pos_integer() | nil
   def max_databases(%Tenant{} = tenant) do
     resolve_key(:max_databases, nil, tenant)

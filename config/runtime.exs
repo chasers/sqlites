@@ -80,7 +80,8 @@ if config_env() == :prod do
     ],
     secret_key_base: secret_key_base
 
-  config :smolsqls, Smolsqls.Secrets, key: System.get_env("TOKEN_ENCRYPTION_KEY") || secret_key_base
+  config :smolsqls, Smolsqls.Secrets,
+    key: System.get_env("TOKEN_ENCRYPTION_KEY") || secret_key_base
 
   config :smolsqls, data_dir: System.get_env("DATA_DIR") || "/var/lib/smolsqls/data"
 

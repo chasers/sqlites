@@ -18,12 +18,20 @@ defmodule SmolsqlsWeb.SessionController do
   end
 
   def signup(conn, params) do
-    case ControlPlane.create_tenant(params) do
+    case ControlPlane.create_tenant(params, signup_ip: SmolsqlsWeb.ClientIP.get(conn)) do
       {:ok, tenant} ->
         conn
         |> put_session(:api_key, tenant.api_key)
         |> put_flash(:info, "Account created. Reveal and copy your API key below to connect.")
         |> redirect(to: ~p"/account")
+
+      {:error, :signup_rate_limited} ->
+        conn
+        |> put_flash(
+          :error,
+          "Too many accounts created from your network recently. Try again later."
+        )
+        |> redirect(to: ~p"/")
 
       {:error, changeset} ->
         conn

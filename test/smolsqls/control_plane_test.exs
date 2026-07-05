@@ -27,6 +27,58 @@ defmodule Smolsqls.ControlPlaneTest do
       assert %{slug: _} = errors_on(changeset)
     end
 
+    test "create_tenant/1 with no ip is never rate-limited" do
+      for _ <- 1..7 do
+        assert {:ok, _} = ControlPlane.create_tenant(%{"name" => "Acme", "slug" => unique_slug()})
+      end
+    end
+
+    test "create_tenant/2 rate-limits signups per ip" do
+      ip = "203.0.113.7"
+
+      for _ <- 1..5 do
+        assert {:ok, _} =
+                 ControlPlane.create_tenant(%{"name" => "Acme", "slug" => unique_slug()},
+                   signup_ip: ip
+                 )
+      end
+
+      assert {:error, :signup_rate_limited} =
+               ControlPlane.create_tenant(%{"name" => "Acme", "slug" => unique_slug()},
+                 signup_ip: ip
+               )
+    end
+
+    test "create_tenant/2 limits per ip independently" do
+      for _ <- 1..5 do
+        assert {:ok, _} =
+                 ControlPlane.create_tenant(%{"name" => "Acme", "slug" => unique_slug()},
+                   signup_ip: "203.0.113.7"
+                 )
+      end
+
+      assert {:ok, _} =
+               ControlPlane.create_tenant(%{"name" => "Acme", "slug" => unique_slug()},
+                 signup_ip: "198.51.100.9"
+               )
+    end
+
+    test "create_tenant/2 does not count a failed create against the ip" do
+      ip = "203.0.113.7"
+
+      for _ <- 1..5 do
+        assert {:error, _} =
+                 ControlPlane.create_tenant(%{"name" => "Acme", "slug" => "BAD SLUG"},
+                   signup_ip: ip
+                 )
+      end
+
+      assert {:ok, _} =
+               ControlPlane.create_tenant(%{"name" => "Acme", "slug" => unique_slug()},
+                 signup_ip: ip
+               )
+    end
+
     test "authenticate_tenant/1 finds a tenant by api key" do
       tenant = tenant_fixture()
       assert {:ok, found} = ControlPlane.authenticate_tenant(tenant.api_key)

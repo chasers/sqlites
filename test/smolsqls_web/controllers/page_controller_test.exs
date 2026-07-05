@@ -6,5 +6,8 @@ defmodule SmolsqlsWeb.PageControllerTest do
     response = html_response(conn, 200)
     assert response =~ "Sign in with your API key"
     assert response =~ "Create a tenant"
+    assert response =~ "Platform limits"
+    assert response =~ "Databases per account"
+    assert response =~ "1 GiB"
   end
 end

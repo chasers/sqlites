@@ -26,31 +26,50 @@ defmodule Smolsqls.ControlPlane do
   alias Smolsqls.ReadModel
   alias Smolsqls.Repo
 
-  def create_tenant(attrs) do
-    Repo.transaction(fn ->
-      with {:ok, tenant} <- Repo.insert(Tenant.changeset(%Tenant{}, attrs)),
-           {:ok, api_key} <-
-             Repo.insert(
-               TenantApiKey.create_changeset(
-                 %TenantApiKey{tenant_id: tenant.id},
-                 %{"name" => "default"}
-               )
-             ) do
-        {tenant, api_key}
-      else
-        {:error, changeset} -> Repo.rollback(changeset)
-      end
-    end)
-    |> case do
-      {:ok, {tenant, api_key}} ->
-        write_through({:ok, tenant}, &ReadModel.put_tenant/1)
-        write_through({:ok, api_key}, &ReadModel.put_tenant_api_key/1)
-        {:ok, %{tenant | api_key: api_key.token}}
+  @doc """
+  Creates a tenant with a `"default"` API key. When `opts[:signup_ip]`
+  is given, the creation is rate-limited per IP (see
+  `Smolsqls.SignupLimiter` and `config :smolsqls, :signup_rate_limit`);
+  without it (internal tooling, tests) no limit applies.
+  """
+  @spec create_tenant(map(), keyword()) ::
+          {:ok, Tenant.t()} | {:error, :signup_rate_limited | Ecto.Changeset.t()}
+  def create_tenant(attrs, opts \\ []) do
+    signup_ip = Keyword.get(opts, :signup_ip)
 
-      {:error, changeset} ->
-        {:error, changeset}
+    with :ok <- check_signup_limit(signup_ip) do
+      Repo.transaction(fn ->
+        with {:ok, tenant} <- Repo.insert(Tenant.changeset(%Tenant{}, attrs)),
+             {:ok, api_key} <-
+               Repo.insert(
+                 TenantApiKey.create_changeset(
+                   %TenantApiKey{tenant_id: tenant.id},
+                   %{"name" => "default"}
+                 )
+               ) do
+          {tenant, api_key}
+        else
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
+      |> case do
+        {:ok, {tenant, api_key}} ->
+          record_signup(signup_ip)
+          write_through({:ok, tenant}, &ReadModel.put_tenant/1)
+          write_through({:ok, api_key}, &ReadModel.put_tenant_api_key/1)
+          {:ok, %{tenant | api_key: api_key.token}}
+
+        {:error, changeset} ->
+          {:error, changeset}
+      end
     end
   end
+
+  defp check_signup_limit(nil), do: :ok
+  defp check_signup_limit(ip), do: Smolsqls.SignupLimiter.check(ip)
+
+  defp record_signup(nil), do: :ok
+  defp record_signup(ip), do: Smolsqls.SignupLimiter.record(ip)
 
   def get_tenant(id), do: Repo.get(Tenant, id)
 
