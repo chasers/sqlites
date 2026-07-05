@@ -26,7 +26,7 @@ lighter shipper or a change in the durability model.
 ## Options (decision needed)
 
 1. **Tiered durability** — default tier: periodic snapshot shipping
-   (`VACUUM INTO` → S3, machinery already exists via Sqlites.Backups)
+   (`VACUUM INTO` → S3, machinery already exists via Smolsqls.Backups)
    on a changed-db sweep every N minutes; RPO = N minutes. Premium
    tier: litestream registered dynamically per database (0.5 control
    socket) for continuous replication, capacity-capped per node.

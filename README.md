@@ -1,4 +1,4 @@
-# sqlites
+# smolsqls
 
 A multitenant, globally clusterable SQLite database service written in
 Elixir/Phoenix. Sign up for a tenant, create SQLite databases over a REST
@@ -17,12 +17,12 @@ by streaming the WAL over a per-node permanent logical replication slot
 (`Postgrex.ReplicationConnection` + a minimal pgoutput decoder). Postgres
 downtime pauses create/delete; queries and auth keep working.
 
-**Data plane**: one `Sqlites.DataPlane.Database.Server` GenServer per
+**Data plane**: one `Smolsqls.DataPlane.Database.Server` GenServer per
 database owns the single `exqlite` connection to that SQLite file (WAL
 mode) and serializes all writes. Servers activate **lazily on first
 query** and stay hot for a configurable idle TTL (default 1h), so boot is
 cold and traffic warms the set. Processes register in
-[`syn`](https://hex.pm/packages/syn) under the `:sqlites_databases`
+[`syn`](https://hex.pm/packages/syn) under the `:smolsqls_databases`
 scope, so every node knows which node owns which database; registration
 happens before the SQLite file is opened, which guarantees a single
 writer even under racing activations. Cross-node query traffic travels
@@ -46,7 +46,7 @@ presence: a cached file whose `<file>.generation` sidecar is behind
 the metadb is discarded and re-fetched, and a missing file restores
 via litestream replica (premium) → idle snapshot → latest manual
 backup. This makes placement free: draining a node is metadata-only
-for anything already shipped (`Sqlites.Drain`, driven by the operator
+for anything already shipped (`Smolsqls.Drain`, driven by the operator
 through the `node_drains` metadb table), and an optional LRU cache
 evictor (`CACHE_EVICTION_ENABLED` / `CACHE_HIGH_WATER_BYTES`) keeps
 volumes under a high-water mark by deleting cold, provably-shipped
@@ -71,7 +71,7 @@ files.
 
 **Quotas & limits** are rows, not config: a `limits` map on `tenants`
 with per-database overrides on `databases`, falling back to cluster
-defaults (`config :sqlites, Sqlites.Limits`). Resolution is
+defaults (`config :smolsqls, Smolsqls.Limits`). Resolution is
 database → tenant → default, served from the read model. The set:
 `max_databases` (create time), `max_size_bytes`
 (`PRAGMA max_page_count` at activation), `rate_limit_rps` (per-node
@@ -113,9 +113,9 @@ for query traffic, `DIST_TLS` for membership; per-node certs, see
 **Durability** is an infrastructure concern owned by the Kubernetes
 operator in [`operator/`](operator/): PVC-backed data directories,
 Litestream replication, and CRD-driven backup/restore. The control plane
-talks to it exclusively through the `Sqlites.Infra` port by manipulating
-`SqliteDatabase` custom resources (`Sqlites.Infra.Kubernetes`); dev and
-test use `Sqlites.Infra.Local` (backups via `VACUUM INTO`).
+talks to it exclusively through the `Smolsqls.Infra` port by manipulating
+`SqliteDatabase` custom resources (`Smolsqls.Infra.Kubernetes`); dev and
+test use `Smolsqls.Infra.Local` (backups via `VACUUM INTO`).
 
 ## Agent-friendly by design
 
@@ -170,7 +170,7 @@ Requires Erlang/OTP 27+, Elixir 1.18+, and Postgres on `localhost:5432`
 
 ```sh
 mix setup
-iex --sname sqlites -S mix phx.server
+iex --sname smolsqls -S mix phx.server
 ```
 
 The LiveView UI is at [`localhost:4000`](http://localhost:4000) — sign
@@ -180,7 +180,7 @@ connection strings, and trigger backups from the dashboard.
 ## Deploying (Kubernetes)
 
 `deploy/` holds kustomize manifests: a 3-replica StatefulSet where pod
-`sqlites-N` ↔ PVC `data-sqlites-N` ↔ Erlang node name (the volume-claim
+`smolsqls-N` ↔ PVC `data-smolsqls-N` ↔ Erlang node name (the volume-claim
 identity model), each pod running a Litestream sidecar that databases
 are registered with dynamically over a control socket. The
 [operator](operator/) tracks one `SqliteNode` CR per data-plane node —
@@ -204,7 +204,7 @@ The `FORCE_SSL` Docker build arg (default `true`) gates the compile-time
 `force_ssl` redirect; build with `--build-arg FORCE_SSL=false` when the
 endpoint sits behind a plain-HTTP load balancer. A full GCP/GKE deployment
 (Terraform + kustomize overlay for Cloud SQL, GCS, and Artifact Registry)
-lives in the sibling `sqlites-deploy` repo.
+lives in the sibling `smolsqls-deploy` repo.
 
 ## Tests
 
@@ -221,11 +221,11 @@ including deregistration when the peer dies.
 ## Repo layout
 
 ```
-lib/sqlites/control_plane*    # tenants, databases, placement metadata (Ecto/Postgres)
-lib/sqlites/data_plane*       # per-database servers, syn registry, gen_rpc router
-lib/sqlites/infra*            # port to the durability layer (Local / Kubernetes adapters)
-lib/sqlites_web/controllers/  # REST API (see GET /v1 for the index)
-lib/sqlites_web/hrana/        # Hrana (libSQL) WebSocket endpoint
-lib/sqlites_web/live/         # LiveView dashboard
+lib/smolsqls/control_plane*    # tenants, databases, placement metadata (Ecto/Postgres)
+lib/smolsqls/data_plane*       # per-database servers, syn registry, gen_rpc router
+lib/smolsqls/infra*            # port to the durability layer (Local / Kubernetes adapters)
+lib/smolsqls_web/controllers/  # REST API (see GET /v1 for the index)
+lib/smolsqls_web/hrana/        # Hrana (libSQL) WebSocket endpoint
+lib/smolsqls_web/live/         # LiveView dashboard
 operator/                     # Bonny-based Kubernetes operator (SqliteDatabase CRD)
 ```

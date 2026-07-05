@@ -1,2 +1,2 @@
 ExUnit.start(exclude: [:distributed])
-Ecto.Adapters.SQL.Sandbox.mode(Sqlites.Repo, :manual)
+Ecto.Adapters.SQL.Sandbox.mode(Smolsqls.Repo, :manual)

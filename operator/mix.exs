@@ -1,9 +1,9 @@
-defmodule SqlitesOperator.MixProject do
+defmodule SmolsqlsOperator.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :sqlites_operator,
+      app: :smolsqls_operator,
       version: "0.1.0",
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
@@ -14,7 +14,7 @@ defmodule SqlitesOperator.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {SqlitesOperator.Application, []}
+      mod: {SmolsqlsOperator.Application, []}
     ]
   end
 

@@ -7,7 +7,7 @@ spec:
             - name: MIX_ENV
               value: prod
             - name: BONNY_OPERATOR_NAME
-              value: sqlites-operator
+              value: smolsqls-operator
             - name: BONNY_POD_NAME
               valueFrom:
                 fieldRef:
@@ -24,8 +24,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.serviceAccountName
-          name: sqlites-operator
-          image: sqlites-operator:dev
+          name: smolsqls-operator
+          image: smolsqls-operator:dev
           resources:
             requests:
               cpu: 200m
@@ -38,26 +38,26 @@ spec:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: 65534
-      serviceAccountName: sqlites-operator
+      serviceAccountName: smolsqls-operator
     metadata:
       labels:
-        k8s-app: sqlites-operator
+        k8s-app: smolsqls-operator
   replicas: 1
   selector:
     matchLabels:
-      k8s-app: sqlites-operator
+      k8s-app: smolsqls-operator
 metadata:
-  name: sqlites-operator
+  name: smolsqls-operator
   labels:
-    k8s-app: sqlites-operator
-  namespace: sqlites
+    k8s-app: smolsqls-operator
+  namespace: smolsqls
 kind: Deployment
 apiVersion: apps/v1
 
 ---
 spec:
   scope: Namespaced
-  group: sqlites.supabase.com
+  group: smolsqls.supabase.com
   names:
     kind: SqliteNode
     plural: sqlitenodes
@@ -161,17 +161,17 @@ spec:
       served: true
       deprecationWarning:
 metadata:
-  name: sqlitenodes.sqlites.supabase.com
+  name: sqlitenodes.smolsqls.supabase.com
   labels:
-    k8s-app: sqlites-operator
+    k8s-app: smolsqls-operator
 kind: CustomResourceDefinition
 apiVersion: apiextensions.k8s.io/v1
 
 ---
 metadata:
-  name: sqlites-operator
+  name: smolsqls-operator
   labels:
-    k8s-app: sqlites-operator
+    k8s-app: smolsqls-operator
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 rules:
@@ -201,13 +201,13 @@ rules:
       - get
       - list
   - apiGroups:
-      - sqlites.supabase.com
+      - smolsqls.supabase.com
     resources:
       - sqlitenodes
     verbs:
       - '*'
   - apiGroups:
-      - sqlites.supabase.com
+      - smolsqls.supabase.com
     resources:
       - sqlitenodes/status
     verbs:
@@ -215,25 +215,25 @@ rules:
 
 ---
 metadata:
-  name: sqlites-operator
+  name: smolsqls-operator
   labels:
-    k8s-app: sqlites-operator
-  namespace: sqlites
+    k8s-app: smolsqls-operator
+  namespace: smolsqls
 kind: ServiceAccount
 apiVersion: v1
 
 ---
 metadata:
-  name: sqlites-operator
+  name: smolsqls-operator
   labels:
-    k8s-app: sqlites-operator
+    k8s-app: smolsqls-operator
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 roleRef:
-  name: sqlites-operator
+  name: smolsqls-operator
   kind: ClusterRole
   apiGroup: rbac.authorization.k8s.io
 subjects:
-  - name: sqlites-operator
+  - name: smolsqls-operator
     kind: ServiceAccount
-    namespace: sqlites
+    namespace: smolsqls

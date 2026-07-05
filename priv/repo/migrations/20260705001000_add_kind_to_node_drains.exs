@@ -1,4 +1,4 @@
-defmodule Sqlites.Repo.Migrations.AddKindToNodeDrains do
+defmodule Smolsqls.Repo.Migrations.AddKindToNodeDrains do
   use Ecto.Migration
 
   def up do

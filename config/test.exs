@@ -1,13 +1,13 @@
 import Config
 
-config :sqlites,
+config :smolsqls,
   data_dir: Path.expand("../.data/test#{System.get_env("MIX_TEST_PARTITION")}", __DIR__),
-  infra_adapter: Sqlites.Infra.Local,
+  infra_adapter: Smolsqls.Infra.Local,
   reconcile_on_boot: false
 
-config :sqlites, Sqlites.ReadModel, enabled: false
+config :smolsqls, Smolsqls.ReadModel, enabled: false
 
-config :sqlites, Sqlites.ObjectStore, adapter: Sqlites.ObjectStore.Local
+config :smolsqls, Smolsqls.ObjectStore, adapter: Smolsqls.ObjectStore.Local
 
 config :gen_rpc, tcp_server_port: 15369
 
@@ -18,17 +18,17 @@ config :libcluster, topologies: []
 # The MIX_TEST_PARTITION environment variable can be used
 # to provide built-in test partitioning in CI environment.
 # Run `mix help test` for more information.
-config :sqlites, Sqlites.Repo,
+config :smolsqls, Smolsqls.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
-  database: "sqlites_test#{System.get_env("MIX_TEST_PARTITION")}",
+  database: "smolsqls_test#{System.get_env("MIX_TEST_PARTITION")}",
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2
 
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
-config :sqlites, SqlitesWeb.Endpoint,
+config :smolsqls, SmolsqlsWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
   secret_key_base: "JW4miBfU07mU4e649ZIcazF61oSMrbrtIp7924lVO/ZLQt27Iqzsu4f8EsB1yMO2",
   server: false
@@ -47,6 +47,6 @@ config :phoenix_live_view,
 config :phoenix,
   sort_verified_routes_query_params: true
 
-config :sqlites, Sqlites.Secrets, key: "test-only-token-encryption-key"
+config :smolsqls, Smolsqls.Secrets, key: "test-only-token-encryption-key"
 
-config :sqlites, reconciler_membership_timeout: 0
+config :smolsqls, reconciler_membership_timeout: 0

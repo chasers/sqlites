@@ -7,16 +7,16 @@
 # General application configuration
 import Config
 
-config :sqlites,
-  ecto_repos: [Sqlites.Repo],
+config :smolsqls,
+  ecto_repos: [Smolsqls.Repo],
   generators: [timestamp_type: :utc_datetime],
-  data_dir: "/var/lib/sqlites/data",
-  infra_adapter: Sqlites.Infra.Kubernetes,
+  data_dir: "/var/lib/smolsqls/data",
+  infra_adapter: Smolsqls.Infra.Kubernetes,
   database_idle_ttl: :timer.hours(1)
 
-config :sqlites, Sqlites.ReadModel, enabled: true
+config :smolsqls, Smolsqls.ReadModel, enabled: true
 
-config :sqlites, Sqlites.Limits,
+config :smolsqls, Smolsqls.Limits,
   max_databases: 100,
   max_size_bytes: 1_073_741_824,
   rate_limit_rps: nil,
@@ -26,17 +26,17 @@ config :sqlites, Sqlites.Limits,
   idle_ttl_ms: nil,
   max_hot_ms: nil
 
-config :sqlites, Sqlites.ObjectStore, adapter: Sqlites.ObjectStore.S3
+config :smolsqls, Smolsqls.ObjectStore, adapter: Smolsqls.ObjectStore.S3
 
 # Configure the endpoint
-config :sqlites, SqlitesWeb.Endpoint,
+config :smolsqls, SmolsqlsWeb.Endpoint,
   url: [host: "localhost"],
   adapter: Bandit.PhoenixAdapter,
   render_errors: [
-    formats: [html: SqlitesWeb.ErrorHTML, json: SqlitesWeb.ErrorJSON],
+    formats: [html: SmolsqlsWeb.ErrorHTML, json: SmolsqlsWeb.ErrorJSON],
     layout: false
   ],
-  pubsub_server: Sqlites.PubSub,
+  pubsub_server: Smolsqls.PubSub,
   live_view: [signing_salt: "MIoW4iP6"]
 
 # Configure LiveView
@@ -47,7 +47,7 @@ config :phoenix_live_view,
 # Configure esbuild (the version is required)
 config :esbuild,
   version: "0.25.4",
-  sqlites: [
+  smolsqls: [
     args:
       ~w(js/app.js --bundle --target=es2022 --outdir=../priv/static/assets/js --external:/fonts/* --external:/images/* --alias:@=.),
     cd: Path.expand("../assets", __DIR__),
@@ -57,7 +57,7 @@ config :esbuild,
 # Configure tailwind (the version is required)
 config :tailwind,
   version: "4.3.0",
-  sqlites: [
+  smolsqls: [
     args: ~w(
       --input=assets/css/app.css
       --output=priv/static/assets/css/app.css

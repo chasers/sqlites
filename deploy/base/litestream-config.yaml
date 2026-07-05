@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: litestream-config
-  namespace: sqlites
+  namespace: smolsqls
 data:
   litestream.yml: |
     # Databases are registered dynamically by the data plane over the

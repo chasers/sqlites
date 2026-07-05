@@ -2,4 +2,4 @@
 set -eu
 
 cd -P -- "$(dirname -- "$0")"
-exec ./sqlites eval Sqlites.Release.migrate
+exec ./smolsqls eval Smolsqls.Release.migrate

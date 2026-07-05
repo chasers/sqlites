@@ -1,9 +1,9 @@
-defmodule Sqlites.Fixtures do
+defmodule Smolsqls.Fixtures do
   @moduledoc """
   Test data helpers for tenants and databases.
   """
 
-  alias Sqlites.ControlPlane
+  alias Smolsqls.ControlPlane
 
   def unique_slug, do: "org-#{System.unique_integer([:positive])}"
 
@@ -37,16 +37,16 @@ defmodule Sqlites.Fixtures do
         limits ->
           database
           |> Ecto.Changeset.change(limits: limits)
-          |> Sqlites.Repo.update!()
+          |> Smolsqls.Repo.update!()
       end
 
-    {:ok, database} = Sqlites.DataPlane.place_database(database)
+    {:ok, database} = Smolsqls.DataPlane.place_database(database)
 
     ExUnit.Callbacks.on_exit(fn ->
-      Sqlites.DataPlane.Supervisor.stop_database(database.id)
+      Smolsqls.DataPlane.Supervisor.stop_database(database.id)
 
       if database.file_path do
-        Sqlites.DataPlane.delete_local_files(database.file_path)
+        Smolsqls.DataPlane.delete_local_files(database.file_path)
       end
     end)
 

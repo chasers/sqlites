@@ -43,8 +43,8 @@ WORKDIR /app
 RUN chown nobody /app
 ENV MIX_ENV=prod
 
-COPY --from=builder --chown=nobody:root /app/_build/${MIX_ENV}/rel/sqlites_operator ./
+COPY --from=builder --chown=nobody:root /app/_build/${MIX_ENV}/rel/smolsqls_operator ./
 
 USER nobody
 
-CMD ["/app/bin/sqlites_operator", "start"]
+CMD ["/app/bin/smolsqls_operator", "start"]

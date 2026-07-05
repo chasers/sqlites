@@ -1,13 +1,13 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sqlites-operator
-  namespace: sqlites
+  name: smolsqls-operator
+  namespace: smolsqls
 spec:
   template:
     spec:
       containers:
-        - name: sqlites-operator
+        - name: smolsqls-operator
           env:
             - name: AUTO_EVACUATE_WINDOW_SECONDS
               value: "30"

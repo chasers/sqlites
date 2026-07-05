@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: sqlites-headless
-  namespace: sqlites
+  name: smolsqls-headless
+  namespace: smolsqls
 spec:
   clusterIP: None
   publishNotReadyAddresses: true
   selector:
-    app: sqlites
+    app: smolsqls
   ports:
     - name: epmd
       port: 4369
@@ -21,11 +21,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: sqlites
-  namespace: sqlites
+  name: smolsqls
+  namespace: smolsqls
 spec:
   selector:
-    app: sqlites
+    app: smolsqls
   ports:
     - name: http
       port: 80

@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: minio
-  namespace: sqlites
+  namespace: smolsqls
 spec:
   selector:
     app: minio
@@ -14,7 +14,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: minio
-  namespace: sqlites
+  namespace: smolsqls
 spec:
   replicas: 1
   selector:
@@ -31,9 +31,9 @@ spec:
           args: ["server", "/data"]
           env:
             - name: MINIO_ROOT_USER
-              value: sqlites
+              value: smolsqls
             - name: MINIO_ROOT_PASSWORD
-              value: sqlites-secret
+              value: smolsqls-secret
           ports:
             - containerPort: 9000
           volumeMounts:
@@ -47,7 +47,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: minio-create-bucket
-  namespace: sqlites
+  namespace: smolsqls
 spec:
   backoffLimit: 10
   template:
@@ -60,5 +60,5 @@ spec:
             - /bin/sh
             - -c
             - |
-              until mc alias set local http://minio:9000 sqlites sqlites-secret; do sleep 2; done
-              mc mb --ignore-existing local/sqlites-replica
+              until mc alias set local http://minio:9000 smolsqls smolsqls-secret; do sleep 2; done
+              mc mb --ignore-existing local/smolsqls-replica

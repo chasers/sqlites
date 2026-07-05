@@ -6,24 +6,24 @@
 #   ./bench/qps/kind_latency.sh [pod]
 set -euo pipefail
 
-POD=${1:-sqlites-0}
+POD=${1:-smolsqls-0}
 
-kubectl exec -n sqlites "$POD" -- /app/bin/sqlites rpc '
+kubectl exec -n smolsqls "$POD" -- /app/bin/smolsqls rpc '
   {:ok, tenant} =
-    Sqlites.ControlPlane.create_tenant(%{
+    Smolsqls.ControlPlane.create_tenant(%{
       "name" => "LatBench",
       "slug" => "lat-#{System.unique_integer([:positive])}"
     })
 
   dbs =
     for i <- 1..6 do
-      {:ok, db} = Sqlites.create_database(tenant, %{"name" => "lat-#{i}"})
-      {:ok, _} = Sqlites.DataPlane.query(db.id, "CREATE TABLE t (v TEXT)")
+      {:ok, db} = Smolsqls.create_database(tenant, %{"name" => "lat-#{i}"})
+      {:ok, _} = Smolsqls.DataPlane.query(db.id, "CREATE TABLE t (v TEXT)")
       db
     end
 
   owner_of = fn db ->
-    {:ok, owner} = Sqlites.DataPlane.owner_node(db.id)
+    {:ok, owner} = Smolsqls.DataPlane.owner_node(db.id)
     owner
   end
 
@@ -31,7 +31,7 @@ kubectl exec -n sqlites "$POD" -- /app/bin/sqlites rpc '
     latencies =
       for _ <- 1..2000 do
         started = System.monotonic_time(:microsecond)
-        {:ok, _} = Sqlites.DataPlane.query(db.id, "SELECT 1")
+        {:ok, _} = Smolsqls.DataPlane.query(db.id, "SELECT 1")
         System.monotonic_time(:microsecond) - started
       end
 
@@ -52,6 +52,6 @@ kubectl exec -n sqlites "$POD" -- /app/bin/sqlites rpc '
     IO.puts("no remotely-owned db — placement put everything here")
   end
 
-  {:ok, _} = Sqlites.delete_tenant(tenant)
+  {:ok, _} = Smolsqls.delete_tenant(tenant)
   IO.puts("cleaned up")
 '

@@ -7,8 +7,8 @@
 # activation storm (N cold databases hit with their first query at
 # once).
 
-alias Sqlites.ControlPlane
-alias Sqlites.DataPlane
+alias Smolsqls.ControlPlane
+alias Smolsqls.DataPlane
 
 defmodule Bench do
   def measure(label, fun) do
@@ -28,10 +28,10 @@ end
 {:ok, tenant} =
   tenant
   |> Ecto.Changeset.change(limits: %{"max_databases" => 1_000_000})
-  |> Sqlites.Repo.update()
+  |> Smolsqls.Repo.update()
 
 make_db = fn name ->
-  {:ok, db} = Sqlites.create_database(tenant, %{"name" => name})
+  {:ok, db} = Smolsqls.create_database(tenant, %{"name" => name})
   db
 end
 
@@ -133,8 +133,8 @@ IO.puts("  -> #{Bench.ops_per_sec(1000, seconds)} activations/s\n")
 IO.puts("== cleanup ==")
 
 for cleanup_db <- [db | dbs] ++ storm_dbs do
-  Sqlites.remove_database(cleanup_db)
+  Smolsqls.remove_database(cleanup_db)
 end
 
-{:ok, _} = Sqlites.delete_tenant(tenant)
+{:ok, _} = Smolsqls.delete_tenant(tenant)
 IO.puts("done")

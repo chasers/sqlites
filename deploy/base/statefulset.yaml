@@ -1,32 +1,32 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: sqlites
-  namespace: sqlites
+  name: smolsqls
+  namespace: smolsqls
 spec:
-  serviceName: sqlites-headless
+  serviceName: smolsqls-headless
   replicas: 3
   podManagementPolicy: Parallel
   selector:
     matchLabels:
-      app: sqlites
+      app: smolsqls
   template:
     metadata:
       labels:
-        app: sqlites
+        app: smolsqls
     spec:
-      serviceAccountName: sqlites
+      serviceAccountName: smolsqls
       terminationGracePeriodSeconds: 60
       initContainers:
         - name: migrate
-          image: sqlites:latest
+          image: smolsqls:latest
           command: ["/app/bin/migrate"]
           envFrom:
             - secretRef:
-                name: sqlites-env
+                name: smolsqls-env
       containers:
-        - name: sqlites
-          image: sqlites:latest
+        - name: smolsqls
+          image: smolsqls:latest
           ports:
             - name: http
               containerPort: 4000
@@ -40,7 +40,7 @@ spec:
               containerPort: 5870
           envFrom:
             - secretRef:
-                name: sqlites-env
+                name: smolsqls-env
           env:
             - name: POD_NAME
               valueFrom:
@@ -51,9 +51,9 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: HEADLESS_SERVICE
-              value: sqlites-headless
+              value: smolsqls-headless
             - name: DATA_DIR
-              value: /var/lib/sqlites/data
+              value: /var/lib/smolsqls/data
             - name: PHX_SERVER
               value: "true"
             - name: LITESTREAM_ENABLED
@@ -62,11 +62,11 @@ spec:
               value: /var/run/litestream/litestream.sock
           volumeMounts:
             - name: data
-              mountPath: /var/lib/sqlites/data
+              mountPath: /var/lib/smolsqls/data
             - name: litestream-socket
               mountPath: /var/run/litestream
             - name: gen-rpc-tls
-              mountPath: /etc/sqlites/gen-rpc-tls
+              mountPath: /etc/smolsqls/gen-rpc-tls
               readOnly: true
           readinessProbe:
             httpGet:
@@ -94,16 +94,16 @@ spec:
             - name: LITESTREAM_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: sqlites-env
+                  name: smolsqls-env
                   key: S3_ACCESS_KEY_ID
             - name: LITESTREAM_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: sqlites-env
+                  name: smolsqls-env
                   key: S3_SECRET_ACCESS_KEY
           volumeMounts:
             - name: data
-              mountPath: /var/lib/sqlites/data
+              mountPath: /var/lib/smolsqls/data
             - name: litestream-config
               mountPath: /etc/litestream.yml
               subPath: litestream.yml
@@ -121,7 +121,7 @@ spec:
           emptyDir: {}
         - name: gen-rpc-tls
           secret:
-            secretName: sqlites-gen-rpc-tls
+            secretName: smolsqls-gen-rpc-tls
             optional: true
   volumeClaimTemplates:
     - metadata:

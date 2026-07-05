@@ -1,14 +1,14 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: sqlites
-  namespace: sqlites
+  name: smolsqls
+  namespace: smolsqls
 spec:
   podManagementPolicy: OrderedReady
   template:
     spec:
       containers:
-        - name: sqlites
+        - name: smolsqls
           resources:
             requests:
               cpu: 100m

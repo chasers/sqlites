@@ -1,35 +1,35 @@
-apiVersion: sqlites.supabase.com/v1alpha1
+apiVersion: smolsqls.supabase.com/v1alpha1
 kind: SqliteNode
 metadata:
-  name: sqlites-0
-  namespace: sqlites
+  name: smolsqls-0
+  namespace: smolsqls
 spec:
   ordinal: 0
-  erlangNode: sqlites@sqlites-0.sqlites-headless.sqlites.svc.cluster.local
+  erlangNode: smolsqls@smolsqls-0.smolsqls-headless.smolsqls.svc.cluster.local
   litestream:
-    bucket: s3://sqlites-replica
+    bucket: s3://smolsqls-replica
     pathPrefix: node-0/
 ---
-apiVersion: sqlites.supabase.com/v1alpha1
+apiVersion: smolsqls.supabase.com/v1alpha1
 kind: SqliteNode
 metadata:
-  name: sqlites-1
-  namespace: sqlites
+  name: smolsqls-1
+  namespace: smolsqls
 spec:
   ordinal: 1
-  erlangNode: sqlites@sqlites-1.sqlites-headless.sqlites.svc.cluster.local
+  erlangNode: smolsqls@smolsqls-1.smolsqls-headless.smolsqls.svc.cluster.local
   litestream:
-    bucket: s3://sqlites-replica
+    bucket: s3://smolsqls-replica
     pathPrefix: node-1/
 ---
-apiVersion: sqlites.supabase.com/v1alpha1
+apiVersion: smolsqls.supabase.com/v1alpha1
 kind: SqliteNode
 metadata:
-  name: sqlites-2
-  namespace: sqlites
+  name: smolsqls-2
+  namespace: smolsqls
 spec:
   ordinal: 2
-  erlangNode: sqlites@sqlites-2.sqlites-headless.sqlites.svc.cluster.local
+  erlangNode: smolsqls@smolsqls-2.smolsqls-headless.smolsqls.svc.cluster.local
   litestream:
-    bucket: s3://sqlites-replica
+    bucket: s3://smolsqls-replica
     pathPrefix: node-2/

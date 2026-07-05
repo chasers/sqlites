@@ -13,39 +13,39 @@ patches:
   - path: operator-patch.yaml
 
 images:
-  - name: sqlites
+  - name: smolsqls
     newTag: dev
-  - name: sqlites-operator
+  - name: smolsqls-operator
     newTag: dev
 
 secretGenerator:
-  - name: sqlites-env
-    namespace: sqlites
+  - name: smolsqls-env
+    namespace: smolsqls
     literals:
-      - DATABASE_URL=ecto://postgres:postgres@postgres/sqlites
+      - DATABASE_URL=ecto://postgres:postgres@postgres/smolsqls
       - SECRET_KEY_BASE=kind-only-not-a-secret-kind-only-not-a-secret-kind-only-not-a-secret
       - RELEASE_COOKIE=kind-only-cookie
       - PHX_HOST=localhost
       - PHX_URL_PORT=4000
       - PHX_URL_SCHEME=http
-      - S3_ACCESS_KEY_ID=sqlites
-      - S3_SECRET_ACCESS_KEY=sqlites-secret
+      - S3_ACCESS_KEY_ID=smolsqls
+      - S3_SECRET_ACCESS_KEY=smolsqls-secret
       - S3_ENDPOINT=http://minio:9000
-      - S3_BUCKET=sqlites-replica
-      - LITESTREAM_REPLICA_URL_PREFIX=s3://sqlites-replica.minio:9000/litestream
+      - S3_BUCKET=smolsqls-replica
+      - LITESTREAM_REPLICA_URL_PREFIX=s3://smolsqls-replica.minio:9000/litestream
       - GEN_RPC_TLS=true
       - DIST_TLS=true
 
-  - name: sqlites-gen-rpc-tls
-    namespace: sqlites
+  - name: smolsqls-gen-rpc-tls
+    namespace: smolsqls
     files:
       - tls/ca.pem
-      - tls/sqlites-0.pem
-      - tls/sqlites-0.key
-      - tls/sqlites-1.pem
-      - tls/sqlites-1.key
-      - tls/sqlites-2.pem
-      - tls/sqlites-2.key
+      - tls/smolsqls-0.pem
+      - tls/smolsqls-0.key
+      - tls/smolsqls-1.pem
+      - tls/smolsqls-1.key
+      - tls/smolsqls-2.pem
+      - tls/smolsqls-2.key
 
 generatorOptions:
   disableNameSuffixHash: true

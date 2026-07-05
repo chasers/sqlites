@@ -1,4 +1,4 @@
-defmodule Sqlites.Repo.Migrations.AddLimitsToTenantsAndDatabases do
+defmodule Smolsqls.Repo.Migrations.AddLimitsToTenantsAndDatabases do
   use Ecto.Migration
 
   def up do

@@ -1,4 +1,4 @@
-defmodule Sqlites.Repo.Migrations.AddLitestreamEnabledToDatabases do
+defmodule Smolsqls.Repo.Migrations.AddLitestreamEnabledToDatabases do
   use Ecto.Migration
 
   def change do

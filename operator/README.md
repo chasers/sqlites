@@ -1,19 +1,19 @@
-# sqlites-operator
+# smolsqls-operator
 
 Kubernetes operator (built with [Bonny](https://hex.pm/packages/bonny))
-that owns the durability story for the sqlites service. The control
+that owns the durability story for the smolsqls service. The control
 plane never touches pods, PVCs, or Litestream directly — it creates and
-patches `SqliteDatabase` custom resources (via `Sqlites.Infra.Kubernetes`)
+patches `SqliteDatabase` custom resources (via `Smolsqls.Infra.Kubernetes`)
 and this operator reconciles them.
 
 ## Resource model
 
 ```yaml
-apiVersion: sqlites.supabase.com/v1alpha1
+apiVersion: smolsqls.supabase.com/v1alpha1
 kind: SqliteDatabase
 metadata:
   name: db-<database-id>
-  namespace: sqlites
+  namespace: smolsqls
 spec:
   databaseId: <uuid>          # control-plane database id
   tenantId: <uuid>
@@ -56,6 +56,6 @@ mix bonny.gen.manifest   # generate CRD + deployment manifests
 ```
 
 The operator only starts its watch loop when
-`config :sqlites_operator, start_operator: true` (default in `:prod`).
+`config :smolsqls_operator, start_operator: true` (default in `:prod`).
 Dev connects via `~/.kube/config`, prod via the in-cluster service
 account.

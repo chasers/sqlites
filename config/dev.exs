@@ -1,17 +1,17 @@
 import Config
 
-config :sqlites,
+config :smolsqls,
   data_dir: Path.expand("../.data", __DIR__),
-  infra_adapter: Sqlites.Infra.Local
+  infra_adapter: Smolsqls.Infra.Local
 
-config :sqlites, Sqlites.ObjectStore, adapter: Sqlites.ObjectStore.Local
+config :smolsqls, Smolsqls.ObjectStore, adapter: Smolsqls.ObjectStore.Local
 
 # Configure your database
-config :sqlites, Sqlites.Repo,
+config :smolsqls, Smolsqls.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
-  database: "sqlites_dev",
+  database: "smolsqls_dev",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
@@ -22,7 +22,7 @@ config :sqlites, Sqlites.Repo,
 # The watchers configuration can be used to run external
 # watchers to your application. For example, we can use it
 # to bundle .js and .css sources.
-config :sqlites, SqlitesWeb.Endpoint,
+config :smolsqls, SmolsqlsWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
   # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
   http: [ip: {127, 0, 0, 1}],
@@ -31,8 +31,8 @@ config :sqlites, SqlitesWeb.Endpoint,
   debug_errors: true,
   secret_key_base: "bZXACw8Jw5r61G5svhU9/vE5tyXiI5Xn1eoWudiW0FedEuO0w9khl6cHnJ3yjcRt",
   watchers: [
-    esbuild: {Esbuild, :install_and_run, [:sqlites, ~w(--sourcemap=inline --watch)]},
-    tailwind: {Tailwind, :install_and_run, [:sqlites, ~w(--watch)]}
+    esbuild: {Esbuild, :install_and_run, [:smolsqls, ~w(--sourcemap=inline --watch)]},
+    tailwind: {Tailwind, :install_and_run, [:smolsqls, ~w(--watch)]}
   ]
 
 # ## SSL Support
@@ -59,7 +59,7 @@ config :sqlites, SqlitesWeb.Endpoint,
 # different ports.
 
 # Reload browser tabs when matching files change.
-config :sqlites, SqlitesWeb.Endpoint,
+config :smolsqls, SmolsqlsWeb.Endpoint,
   live_reload: [
     web_console_logger: true,
     patterns: [
@@ -68,13 +68,13 @@ config :sqlites, SqlitesWeb.Endpoint,
       # Gettext translations
       ~r"priv/gettext/.*\.po$"E,
       # Router, Controllers, LiveViews and LiveComponents
-      ~r"lib/sqlites_web/router\.ex$"E,
-      ~r"lib/sqlites_web/(controllers|live|components)/.*\.(ex|heex)$"E
+      ~r"lib/smolsqls_web/router\.ex$"E,
+      ~r"lib/smolsqls_web/(controllers|live|components)/.*\.(ex|heex)$"E
     ]
   ]
 
 # Enable dev routes for dashboard and mailbox
-config :sqlites, dev_routes: true
+config :smolsqls, dev_routes: true
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
@@ -94,4 +94,4 @@ config :phoenix_live_view,
   # Enable helpful, but potentially expensive runtime checks
   enable_expensive_runtime_checks: true
 
-config :sqlites, Sqlites.Secrets, key: "dev-only-token-encryption-key"
+config :smolsqls, Smolsqls.Secrets, key: "dev-only-token-encryption-key"

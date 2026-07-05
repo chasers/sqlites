@@ -1,4 +1,4 @@
-defmodule Sqlites.Repo.Migrations.CreateAuthTokens do
+defmodule Smolsqls.Repo.Migrations.CreateAuthTokens do
   use Ecto.Migration
 
   def up do
@@ -50,11 +50,11 @@ defmodule Sqlites.Repo.Migrations.CreateAuthTokens do
       remove :api_key
     end
 
-    execute "ALTER PUBLICATION sqlites_read_model ADD TABLE database_tokens, tenant_api_keys"
+    execute "ALTER PUBLICATION smolsqls_read_model ADD TABLE database_tokens, tenant_api_keys"
   end
 
   def down do
-    execute "ALTER PUBLICATION sqlites_read_model DROP TABLE database_tokens, tenant_api_keys"
+    execute "ALTER PUBLICATION smolsqls_read_model DROP TABLE database_tokens, tenant_api_keys"
 
     alter table(:databases) do
       add :auth_token, :string
@@ -79,7 +79,7 @@ defmodule Sqlites.Repo.Migrations.CreateAuthTokens do
           (id, #{owner_column}, token_hash, token_ciphertext, name, enabled, inserted_at, updated_at)
         VALUES (gen_random_uuid(), $1, $2, $3, 'default', true, now(), now())
         """,
-        [owner_id, Sqlites.Secrets.hash(secret), Sqlites.Secrets.encrypt(secret)]
+        [owner_id, Smolsqls.Secrets.hash(secret), Smolsqls.Secrets.encrypt(secret)]
       )
     end
 

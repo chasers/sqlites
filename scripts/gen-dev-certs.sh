@@ -15,12 +15,12 @@ mkdir -p "$OUT"
 if [ ! -f "$OUT/ca.pem" ]; then
   openssl genrsa -out "$OUT/ca.key" 2048 2>/dev/null
   openssl req -x509 -new -nodes -key "$OUT/ca.key" -sha256 -days "$DAYS" \
-    -subj "/CN=sqlites-dev-ca" -out "$OUT/ca.pem"
+    -subj "/CN=smolsqls-dev-ca" -out "$OUT/ca.pem"
 fi
 
 for i in $(seq 0 $((REPLICAS - 1))); do
-  pod="sqlites-$i"
-  fqdn="${pod}.sqlites-headless.sqlites.svc.cluster.local"
+  pod="smolsqls-$i"
+  fqdn="${pod}.smolsqls-headless.smolsqls.svc.cluster.local"
   [ -f "$OUT/$pod.pem" ] && continue
 
   openssl genrsa -out "$OUT/$pod.key" 2048 2>/dev/null
@@ -31,4 +31,4 @@ for i in $(seq 0 $((REPLICAS - 1))); do
   rm -f "$OUT/$pod.csr"
 done
 
-echo "certs in $OUT: ca.pem + $(seq -s ', ' -f 'sqlites-%g' 0 $((REPLICAS - 1)))"
+echo "certs in $OUT: ca.pem + $(seq -s ', ' -f 'smolsqls-%g' 0 $((REPLICAS - 1)))"

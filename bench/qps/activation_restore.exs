@@ -13,8 +13,8 @@
 # The dev object store is the local filesystem; real S3 adds network
 # on top of every restore/ship number below.
 
-alias Sqlites.ControlPlane
-alias Sqlites.DataPlane
+alias Smolsqls.ControlPlane
+alias Smolsqls.DataPlane
 
 defmodule Bench do
   def measure(label, fun) do
@@ -53,7 +53,7 @@ end
 {:ok, tenant} =
   tenant
   |> Ecto.Changeset.change(limits: %{"max_databases" => 1_000_000})
-  |> Sqlites.Repo.update()
+  |> Smolsqls.Repo.update()
 
 db_count = 500
 
@@ -61,7 +61,7 @@ IO.puts("== setup: #{db_count} databases with a small working set ==")
 
 dbs =
   for i <- 1..db_count do
-    {:ok, db} = Sqlites.create_database(tenant, %{"name" => "act-#{i}"})
+    {:ok, db} = Smolsqls.create_database(tenant, %{"name" => "act-#{i}"})
     {:ok, _} = DataPlane.query(db.id, "CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)")
 
     for j <- 1..20 do
@@ -92,7 +92,7 @@ IO.puts("  -> #{Bench.ops_per_sec(db_count, seconds)} ships/s (50 concurrent)")
 Bench.latency_line("ship latency", ship_latencies)
 
 snapshot_bytes =
-  Application.fetch_env!(:sqlites, :data_dir)
+  Application.fetch_env!(:smolsqls, :data_dir)
   |> Path.join("object_store/idle-snapshots/#{tenant.id}")
   |> Path.join("*/latest.db")
   |> Path.wildcard()
@@ -165,8 +165,8 @@ IO.puts(
 IO.puts("\n== cleanup ==")
 
 for db <- fresh do
-  Sqlites.remove_database(db)
+  Smolsqls.remove_database(db)
 end
 
-{:ok, _} = Sqlites.delete_tenant(tenant)
+{:ok, _} = Smolsqls.delete_tenant(tenant)
 IO.puts("done")

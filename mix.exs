@@ -1,9 +1,9 @@
-defmodule Sqlites.MixProject do
+defmodule Smolsqls.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :sqlites,
+      app: :smolsqls,
       version: "0.1.0",
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -20,7 +20,7 @@ defmodule Sqlites.MixProject do
   # Type `mix help compile.app` for more information.
   def application do
     [
-      mod: {Sqlites.Application, []},
+      mod: {Smolsqls.Application, []},
       extra_applications: [:logger, :runtime_tools]
     ]
   end
@@ -85,10 +85,10 @@ defmodule Sqlites.MixProject do
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
-      "assets.build": ["compile", "tailwind sqlites", "esbuild sqlites"],
+      "assets.build": ["compile", "tailwind smolsqls", "esbuild smolsqls"],
       "assets.deploy": [
-        "tailwind sqlites --minify",
-        "esbuild sqlites --minify",
+        "tailwind smolsqls --minify",
+        "esbuild smolsqls --minify",
         "phx.digest"
       ],
       precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]

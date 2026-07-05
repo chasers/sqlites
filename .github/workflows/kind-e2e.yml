@@ -26,7 +26,7 @@ jobs:
       - name: Dump diagnostics on failure
         if: failure()
         run: |
-          kubectl -n sqlites get pods -o wide || true
-          kubectl -n sqlites describe pods | tail -200 || true
-          kubectl -n sqlites logs sqlites-0 --tail=200 || true
-          kubectl -n sqlites get sqlitenodes -o yaml || true
+          kubectl -n smolsqls get pods -o wide || true
+          kubectl -n smolsqls describe pods | tail -200 || true
+          kubectl -n smolsqls logs smolsqls-0 --tail=200 || true
+          kubectl -n smolsqls get sqlitenodes -o yaml || true

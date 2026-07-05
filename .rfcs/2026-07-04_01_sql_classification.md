@@ -5,7 +5,7 @@
 ## Problem
 
 Idle-stop ships a `VACUUM INTO` snapshot on *every* session because the
-keyword classifier (`Sqlites.DataPlane.Sql`) is not trusted with
+keyword classifier (`Smolsqls.DataPlane.Sql`) is not trusted with
 durability decisions — one misclassified write loses data (decided
 2026-07-04). Read-heavy fleets therefore pay one S3 PUT per idle-stop
 per database for sessions that changed nothing. Hrana

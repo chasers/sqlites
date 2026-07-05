@@ -1,4 +1,4 @@
-defmodule Sqlites.Repo.Migrations.AddSnapshotGenerationToDatabases do
+defmodule Smolsqls.Repo.Migrations.AddSnapshotGenerationToDatabases do
   use Ecto.Migration
 
   def up do

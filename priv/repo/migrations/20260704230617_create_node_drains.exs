@@ -1,4 +1,4 @@
-defmodule Sqlites.Repo.Migrations.CreateNodeDrains do
+defmodule Smolsqls.Repo.Migrations.CreateNodeDrains do
   use Ecto.Migration
 
   def up do

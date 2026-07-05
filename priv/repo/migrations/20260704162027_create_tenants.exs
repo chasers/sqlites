@@ -1,4 +1,4 @@
-defmodule Sqlites.Repo.Migrations.CreateTenants do
+defmodule Smolsqls.Repo.Migrations.CreateTenants do
   use Ecto.Migration
 
   def change do

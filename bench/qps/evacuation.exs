@@ -12,9 +12,9 @@
 
 import Ecto.Query
 
-alias Sqlites.ControlPlane
-alias Sqlites.ControlPlane.Database
-alias Sqlites.Repo
+alias Smolsqls.ControlPlane
+alias Smolsqls.ControlPlane.Database
+alias Smolsqls.Repo
 
 defmodule Bench do
   def measure(label, fun) do
@@ -32,7 +32,7 @@ end
     "slug" => "bench-#{System.unique_integer([:positive])}"
   })
 
-dead_node = "sqlites@bench-dead-node"
+dead_node = "smolsqls@bench-dead-node"
 row_count = 100_000
 
 IO.puts("== seeding #{row_count} placement rows on #{dead_node} ==")
@@ -52,7 +52,7 @@ now = DateTime.utc_now()
             name: "evac-#{i}",
             status: :active,
             node: dead_node,
-            file_path: "/var/lib/sqlites/data/#{tenant.id}/evac-#{i}.db",
+            file_path: "/var/lib/smolsqls/data/#{tenant.id}/evac-#{i}.db",
             snapshot_generation: 1,
             limits: %{},
             inserted_at: now,
@@ -69,24 +69,24 @@ IO.puts("  -> #{Float.round(row_count / seconds, 0)} rows/s seeded\n")
 IO.puts("== evacuate #{row_count} rows to the survivors ==")
 
 {{:ok, %{reassigned: reassigned}}, seconds} =
-  Bench.measure("Failover.evacuate", fn -> Sqlites.Failover.evacuate(dead_node) end)
+  Bench.measure("Failover.evacuate", fn -> Smolsqls.Failover.evacuate(dead_node) end)
 
 IO.puts("  -> #{reassigned} rows reassigned, #{Float.round(row_count / seconds, 0)} rows/s\n")
 
 IO.puts("== fence sweep with hot servers on this node ==")
 
 server_count = 2_000
-data_dir = Application.fetch_env!(:sqlites, :data_dir)
+data_dir = Application.fetch_env!(:smolsqls, :data_dir)
 
 for i <- 1..server_count do
   id = Ecto.UUID.generate()
   path = Path.join([data_dir, "fence-bench", id <> ".db"])
-  {:ok, _} = Sqlites.DataPlane.Supervisor.start_database(id, path)
+  {:ok, _} = Smolsqls.DataPlane.Supervisor.start_database(id, path)
 end
 
 {flagged, seconds} =
   Bench.measure("Fence.sweep over #{server_count} local servers", fn ->
-    Sqlites.DataPlane.Fence.sweep()
+    Smolsqls.DataPlane.Fence.sweep()
   end)
 
 IO.puts(
@@ -96,9 +96,9 @@ IO.puts(
 
 IO.puts("== cleanup ==")
 
-for pid <- Sqlites.DataPlane.Supervisor.local_servers() do
-  case Sqlites.DataPlane.Database.Server.database_id(pid) do
-    {:ok, id} -> Sqlites.DataPlane.Supervisor.stop_database(id)
+for pid <- Smolsqls.DataPlane.Supervisor.local_servers() do
+  case Smolsqls.DataPlane.Database.Server.database_id(pid) do
+    {:ok, id} -> Smolsqls.DataPlane.Supervisor.stop_database(id)
     _ -> :ok
   end
 end

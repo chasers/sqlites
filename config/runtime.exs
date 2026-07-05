@@ -12,15 +12,15 @@ import Config
 # If you use `mix release`, you need to explicitly enable the server
 # by passing the PHX_SERVER=true when you start it:
 #
-#     PHX_SERVER=true bin/sqlites start
+#     PHX_SERVER=true bin/smolsqls start
 #
 # Alternatively, you can use `mix phx.gen.release` to generate a `bin/server`
 # script that automatically sets the env var above.
 if System.get_env("PHX_SERVER") do
-  config :sqlites, SqlitesWeb.Endpoint, server: true
+  config :smolsqls, SmolsqlsWeb.Endpoint, server: true
 end
 
-config :sqlites, SqlitesWeb.Endpoint,
+config :smolsqls, SmolsqlsWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
 if config_env() == :prod do
@@ -37,7 +37,7 @@ if config_env() == :prod do
 
   [db_username | db_password] = String.split(db_uri.userinfo || "postgres", ":", parts: 2)
 
-  config :sqlites, Sqlites.Repo,
+  config :smolsqls, Smolsqls.Repo,
     # ssl: true,
     url: database_url,
     # Discrete connection keys are also set because the libcluster
@@ -47,7 +47,7 @@ if config_env() == :prod do
     port: db_uri.port || 5432,
     username: db_username,
     password: List.first(db_password) || "",
-    database: String.trim_leading(db_uri.path || "/sqlites", "/"),
+    database: String.trim_leading(db_uri.path || "/smolsqls", "/"),
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
     # For machines with several cores, consider starting multiple pools of `pool_size`
     # pool_count: 4,
@@ -69,7 +69,7 @@ if config_env() == :prod do
   url_port = String.to_integer(System.get_env("PHX_URL_PORT") || "443")
   url_scheme = System.get_env("PHX_URL_SCHEME") || "https"
 
-  config :sqlites, SqlitesWeb.Endpoint,
+  config :smolsqls, SmolsqlsWeb.Endpoint,
     url: [host: host, port: url_port, scheme: url_scheme],
     http: [
       # Enable IPv6 and bind on all interfaces.
@@ -80,29 +80,29 @@ if config_env() == :prod do
     ],
     secret_key_base: secret_key_base
 
-  config :sqlites, Sqlites.Secrets, key: System.get_env("TOKEN_ENCRYPTION_KEY") || secret_key_base
+  config :smolsqls, Smolsqls.Secrets, key: System.get_env("TOKEN_ENCRYPTION_KEY") || secret_key_base
 
-  config :sqlites, data_dir: System.get_env("DATA_DIR") || "/var/lib/sqlites/data"
+  config :smolsqls, data_dir: System.get_env("DATA_DIR") || "/var/lib/smolsqls/data"
 
-  config :sqlites, Sqlites.ObjectStore,
-    adapter: Sqlites.ObjectStore.S3,
-    bucket: System.get_env("S3_BUCKET") || "sqlites-replica",
+  config :smolsqls, Smolsqls.ObjectStore,
+    adapter: Smolsqls.ObjectStore.S3,
+    bucket: System.get_env("S3_BUCKET") || "smolsqls-replica",
     access_key_id: System.get_env("S3_ACCESS_KEY_ID"),
     secret_access_key: System.get_env("S3_SECRET_ACCESS_KEY"),
     endpoint: System.get_env("S3_ENDPOINT")
 
-  config :sqlites, Sqlites.DataPlane.Litestream,
+  config :smolsqls, Smolsqls.DataPlane.Litestream,
     enabled: System.get_env("LITESTREAM_ENABLED") in ~w(true 1),
     socket: System.get_env("LITESTREAM_SOCKET") || "/var/run/litestream/litestream.sock",
     replica_url_prefix: System.get_env("LITESTREAM_REPLICA_URL_PREFIX")
 
-  config :sqlites, Sqlites.DataPlane.CacheEvictor,
+  config :smolsqls, Smolsqls.DataPlane.CacheEvictor,
     enabled: System.get_env("CACHE_EVICTION_ENABLED") in ~w(true 1),
     high_water_bytes: String.to_integer(System.get_env("CACHE_HIGH_WATER_BYTES") || "53687091200")
 
-  config :sqlites, Sqlites.Drain.Worker, enabled: true
+  config :smolsqls, Smolsqls.Drain.Worker, enabled: true
 
-  config :sqlites, Sqlites.DataPlane.Fence, enabled: true
+  config :smolsqls, Smolsqls.DataPlane.Fence, enabled: true
 
   if gen_rpc_port = System.get_env("GEN_RPC_PORT") do
     config :gen_rpc, tcp_server_port: String.to_integer(gen_rpc_port)
@@ -113,7 +113,7 @@ if config_env() == :prod do
   # name), mounted from a k8s secret; scripts/gen-dev-certs.sh
   # generates a dev CA + node certs for the kind overlay.
   if System.get_env("GEN_RPC_TLS") in ~w(true 1) do
-    tls_dir = System.get_env("GEN_RPC_TLS_DIR") || "/etc/sqlites/gen-rpc-tls"
+    tls_dir = System.get_env("GEN_RPC_TLS_DIR") || "/etc/smolsqls/gen-rpc-tls"
 
     pod_name =
       System.get_env("POD_NAME") || System.get_env("HOSTNAME") ||
@@ -141,7 +141,7 @@ if config_env() == :prod do
   # To get SSL working, you will need to add the `https` key
   # to your endpoint configuration:
   #
-  #     config :sqlites, SqlitesWeb.Endpoint,
+  #     config :smolsqls, SmolsqlsWeb.Endpoint,
   #       https: [
   #         ...,
   #         port: 443,
@@ -163,7 +163,7 @@ if config_env() == :prod do
   # We also recommend setting `force_ssl` in your config/prod.exs,
   # ensuring no data is ever sent via http, always redirecting to https:
   #
-  #     config :sqlites, SqlitesWeb.Endpoint,
+  #     config :smolsqls, SmolsqlsWeb.Endpoint,
   #       force_ssl: [hsts: true]
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.

@@ -1,1 +1,1 @@
-call "%~dp0\sqlites" eval Sqlites.Release.migrate
+call "%~dp0\smolsqls" eval Smolsqls.Release.migrate
