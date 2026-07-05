@@ -41,7 +41,7 @@ defmodule Sqlites.MixProject do
   defp deps do
     [
       {:phoenix, "~> 1.8.8"},
-      {:telemetry_metrics_prometheus_core, "~> 1.2"},
+      {:peep, "~> 3.5"},
       {:phoenix_ecto, "~> 4.5"},
       {:ecto_sql, "~> 3.13"},
       {:postgrex, ">= 0.0.0"},

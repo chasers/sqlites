@@ -12,9 +12,15 @@ Two measurement eras:
   `activation_restore.exs` + `evacuation.exs`): idle-snapshot
   shipping, writer leases, per-query telemetry, gen_rpc over TLS in
   kind. **Caveat:** the phase 5 locals were measured while the 3-pod
-  kind cluster ran on the same machine; a controlled A/B on the read
-  loop attributes ~10–15% to the Prometheus telemetry handlers and the
-  rest of the deltas to machine load. Treat ±20% as noise here.
+  kind cluster ran on the same machine; treat ±20% as noise here. A
+  controlled A/B on the read loop initially attributed ~10–15% to the
+  `telemetry_metrics_prometheus_core` handlers (shared-ETS contention:
+  handlers run inline in the emitting process, and 50 readers hammer
+  the same series keys). Swapping the aggregation backend to **Peep
+  with striped storage** (one ETS table per scheduler) removed the
+  overhead entirely — same noisy environment, ~21,200 reads/s with
+  handlers attached vs ~16–20k across control runs, i.e. within
+  noise — while nearly closing the gap to the phase 3 number.
 
 ## Single-node throughput (local)
 
@@ -22,14 +28,13 @@ Two measurement eras:
 |---|---|---|
 | single db, sequential inserts | ~9,900 writes/s | **~9,360 writes/s** |
 | single db, 50 concurrent writers | ~9,450 writes/s | **~9,780 writes/s** |
-| single db, 50 concurrent reads | ~25,000 reads/s | **~11,400 reads/s** (see caveat above; A/B: 7.3k with telemetry vs 8.4k detached in the same noisy run) |
+| single db, 50 concurrent reads | ~25,000 reads/s | **~21,200 reads/s** after moving aggregation to Peep striped storage (first measured ~11,400 on `telemetry_metrics_prometheus_core`; see caveat above) |
 | 100 dbs, 50 concurrent writers | ~12,650 writes/s | **~14,700 writes/s** |
 | activation storm, 1,000 warm-file dbs | ~1,650 act/s | **~1,510 act/s** |
 
 Writer-path throughput is unchanged: the lease check and dirty flag
-are noise. The read loop is the only place the per-query telemetry
-cost is visible at all, and it is bounded by the A/B above; if it ever
-matters, sampling the distribution metric is the lever.
+are noise. The read loop was the only place per-query telemetry cost
+showed up, and the Peep striped-storage backend eliminated it.
 
 ## Activation paths (phase 5 machinery, `activation_restore.exs`)
 

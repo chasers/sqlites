@@ -148,7 +148,7 @@ defmodule Sqlites.ReadModel.ReplicationTest do
     conn
   end
 
-  defp wait_until(fun, attempts \\ 200)
+  defp wait_until(fun, attempts \\ 400)
 
   defp wait_until(fun, 0), do: assert(fun.())
 

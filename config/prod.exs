@@ -9,15 +9,19 @@ config :sqlites, SqlitesWeb.Endpoint, cache_static_manifest: "priv/static/cache_
 
 # Force using SSL in production. This also sets the "strict-security-transport" header,
 # known as HSTS. If you have a health check endpoint, you may want to exclude it below.
-# Note `:force_ssl` is required to be set at compile-time.
-config :sqlites, SqlitesWeb.Endpoint,
-  force_ssl: [
-    rewrite_on: [:x_forwarded_proto],
-    exclude: [
-      # paths: ["/health"],
-      hosts: ["localhost", "127.0.0.1"]
+# Note `:force_ssl` is required to be set at compile-time, so it is gated on the
+# FORCE_SSL build-time environment variable (default enabled). Set FORCE_SSL=false
+# when the endpoint is fronted by a plain-HTTP load balancer with no TLS termination.
+if System.get_env("FORCE_SSL", "true") not in ~w(false 0) do
+  config :sqlites, SqlitesWeb.Endpoint,
+    force_ssl: [
+      rewrite_on: [:x_forwarded_proto],
+      exclude: [
+        # paths: ["/health"],
+        hosts: ["localhost", "127.0.0.1"]
+      ]
     ]
-  ]
+end
 
 # Do not print debug messages in production
 config :logger, level: :info

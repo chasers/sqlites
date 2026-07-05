@@ -200,6 +200,12 @@ Local end-to-end cluster (kind + in-cluster Postgres with
 curl http://localhost:8080/v1
 ```
 
+The `FORCE_SSL` Docker build arg (default `true`) gates the compile-time
+`force_ssl` redirect; build with `--build-arg FORCE_SSL=false` when the
+endpoint sits behind a plain-HTTP load balancer. A full GCP/GKE deployment
+(Terraform + kustomize overlay for Cloud SQL, GCS, and Artifact Registry)
+lives in the sibling `sqlites-deploy` repo.
+
 ## Tests
 
 ```sh

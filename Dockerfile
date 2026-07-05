@@ -35,6 +35,11 @@ RUN mix local.hex --force \
 # set build ENV
 ENV MIX_ENV="prod"
 
+# force_ssl is evaluated at compile-time (config/prod.exs); gate it here so the
+# release can be built for a plain-HTTP load balancer without a code change.
+ARG FORCE_SSL=true
+ENV FORCE_SSL=${FORCE_SSL}
+
 # install mix dependencies
 COPY mix.exs mix.lock ./
 RUN mix deps.get --only $MIX_ENV

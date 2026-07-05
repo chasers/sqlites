@@ -8,8 +8,13 @@ defmodule SqlitesWeb.MetricsController do
   use SqlitesWeb, :controller
 
   def index(conn, _params) do
+    body =
+      :sqlites_peep
+      |> Peep.get_all_metrics()
+      |> Peep.Prometheus.export()
+
     conn
     |> put_resp_content_type("text/plain")
-    |> send_resp(200, TelemetryMetricsPrometheus.Core.scrape(:sqlites_prometheus))
+    |> send_resp(200, IO.iodata_to_binary(body))
   end
 end

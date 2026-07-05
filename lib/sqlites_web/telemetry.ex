@@ -12,7 +12,7 @@ defmodule SqlitesWeb.Telemetry do
       # Telemetry poller will execute the given period measurements
       # every 10_000ms. Learn more here: https://telemetry-metrics.hexdocs.pm
       {:telemetry_poller, measurements: periodic_measurements(), period: 10_000},
-      {TelemetryMetricsPrometheus.Core, metrics: prometheus_metrics(), name: :sqlites_prometheus}
+      {Peep, name: :sqlites_peep, metrics: prometheus_metrics(), storage: :striped}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
@@ -21,10 +21,16 @@ defmodule SqlitesWeb.Telemetry do
   @doc """
   Metrics aggregated for the Prometheus endpoint (`GET /metrics`).
   Alert conditions built on these are listed in `docs/alerts.md`.
+
+  Aggregation is Peep with striped storage — one ETS table per
+  scheduler — because telemetry handlers run inline in the emitting
+  process and the query path emits on every call; a shared-table
+  reporter costs measurable throughput under concurrent load (see
+  bench/qps/RESULTS.md).
   """
   def prometheus_metrics do
-    query_buckets = [1, 5, 10, 25, 50, 100, 250, 500, 1_000, 5_000, 30_000]
-    transfer_buckets = [10, 50, 100, 250, 500, 1_000, 2_500, 5_000, 15_000, 60_000]
+    query_buckets = [peep_bucket_calculator: SqlitesWeb.Telemetry.QueryBuckets]
+    transfer_buckets = [peep_bucket_calculator: SqlitesWeb.Telemetry.TransferBuckets]
 
     [
       last_value("sqlites.hot_servers.count",
@@ -33,17 +39,17 @@ defmodule SqlitesWeb.Telemetry do
       counter("sqlites.query.count", tags: [:result, :remote]),
       distribution("sqlites.query.duration_ms",
         tags: [:result],
-        reporter_options: [buckets: query_buckets]
+        reporter_options: query_buckets
       ),
       counter("sqlites.activation.count", tags: [:path]),
       distribution("sqlites.activation.duration_ms",
         tags: [:path],
-        reporter_options: [buckets: transfer_buckets]
+        reporter_options: transfer_buckets
       ),
       counter("sqlites.idle_snapshot.ship.count", tags: [:result]),
       distribution("sqlites.idle_snapshot.ship.duration_ms",
         tags: [:result],
-        reporter_options: [buckets: transfer_buckets]
+        reporter_options: transfer_buckets
       ),
       sum("sqlites.cache_evictor.sweep.evicted"),
       sum("sqlites.cache_evictor.sweep.freed_bytes"),
@@ -51,10 +57,13 @@ defmodule SqlitesWeb.Telemetry do
       counter("sqlites.rate_limiter.rejected.count"),
       counter("sqlites.fence.stopped.count"),
       sum("sqlites.reconciler.claimed.count"),
-      distribution("phoenix.router_dispatch.stop.duration",
+      distribution("phoenix.router_dispatch.stop.duration_ms",
+        event_name: [:phoenix, :router_dispatch, :stop],
+        measurement: fn %{duration: duration} ->
+          System.convert_time_unit(duration, :native, :millisecond)
+        end,
         tags: [:route],
-        unit: {:native, :millisecond},
-        reporter_options: [buckets: query_buckets]
+        reporter_options: query_buckets
       )
     ]
   end

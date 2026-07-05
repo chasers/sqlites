@@ -384,13 +384,39 @@ defmodule Sqlites.DataPlane.Database.Server do
   end
 
   defp run_query_with_cap(state, sql, args) do
-    {:ok, timer} =
-      :timer.apply_after(state.limits.statement_timeout_ms, Sqlite3, :interrupt, [state.conn])
+    canceller = spawn(canceller(self(), state.conn, state.limits.statement_timeout_ms))
 
     try do
       run_query(state.conn, sql, args)
     after
-      :timer.cancel(timer)
+      send(canceller, :statement_finished)
+    end
+  end
+
+  # exqlite clears its cancel flag when a statement starts, so a
+  # one-shot signal that fires before the first step is lost — the
+  # canceller re-fires every interval until the statement finishes
+  # (worst-case abort ≈ 2× the cap). It also monitors the server: a
+  # server killed mid-statement can't outlive its own cap, because
+  # dirty NIFs keep running after their process dies.
+  defp canceller(server, conn, cap_ms) do
+    fn ->
+      monitor = Process.monitor(server)
+      canceller_loop(monitor, conn, cap_ms)
+    end
+  end
+
+  defp canceller_loop(monitor, conn, cap_ms) do
+    receive do
+      :statement_finished ->
+        :ok
+
+      {:DOWN, ^monitor, :process, _pid, _reason} ->
+        Sqlite3.cancel(conn)
+    after
+      cap_ms ->
+        Sqlite3.cancel(conn)
+        canceller_loop(monitor, conn, cap_ms)
     end
   end
 
