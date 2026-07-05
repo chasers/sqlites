@@ -114,7 +114,10 @@ if config_env() == :prod do
   # generates a dev CA + node certs for the kind overlay.
   if System.get_env("GEN_RPC_TLS") in ~w(true 1) do
     tls_dir = System.get_env("GEN_RPC_TLS_DIR") || "/etc/sqlites/gen-rpc-tls"
-    pod_name = System.get_env("POD_NAME") || raise "GEN_RPC_TLS requires POD_NAME"
+
+    pod_name =
+      System.get_env("POD_NAME") || System.get_env("HOSTNAME") ||
+        raise "GEN_RPC_TLS requires POD_NAME"
 
     ssl_options = [
       certfile: Path.join(tls_dir, pod_name <> ".pem"),
@@ -122,10 +125,13 @@ if config_env() == :prod do
       cacertfile: Path.join(tls_dir, "ca.pem")
     ]
 
+    ssl_port = String.to_integer(System.get_env("GEN_RPC_SSL_PORT") || "5870")
+
     config :gen_rpc,
       default_client_driver: :ssl,
       tcp_server_port: false,
-      ssl_server_port: String.to_integer(System.get_env("GEN_RPC_SSL_PORT") || "5870"),
+      ssl_server_port: ssl_port,
+      ssl_client_port: ssl_port,
       ssl_client_options: ssl_options,
       ssl_server_options: ssl_options
   end

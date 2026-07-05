@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Generates a dev CA plus per-node gen_rpc/dist TLS certificates for
-# the kind overlay. CNs must match Erlang node names because gen_rpc
-# verifies peer CN against the dialed node.
+# the kind overlay. Certificates carry the pod FQDN (CN + DNS SAN):
+# Erlang distribution TLS verifies the peer certificate against the
+# hostname part of the node name; gen_rpc (emqx fork) verifies the
+# chain only.
 set -euo pipefail
 
 OUT=${1:-deploy/overlays/kind/tls}
@@ -18,13 +20,14 @@ fi
 
 for i in $(seq 0 $((REPLICAS - 1))); do
   pod="sqlites-$i"
-  cn="sqlites@${pod}.sqlites-headless.sqlites.svc.cluster.local"
+  fqdn="${pod}.sqlites-headless.sqlites.svc.cluster.local"
   [ -f "$OUT/$pod.pem" ] && continue
 
   openssl genrsa -out "$OUT/$pod.key" 2048 2>/dev/null
-  openssl req -new -key "$OUT/$pod.key" -subj "/CN=$cn" -out "$OUT/$pod.csr"
+  openssl req -new -key "$OUT/$pod.key" -subj "/CN=$fqdn" -out "$OUT/$pod.csr"
   openssl x509 -req -in "$OUT/$pod.csr" -CA "$OUT/ca.pem" -CAkey "$OUT/ca.key" \
-    -CAcreateserial -days "$DAYS" -sha256 -out "$OUT/$pod.pem" 2>/dev/null
+    -CAcreateserial -days "$DAYS" -sha256 -out "$OUT/$pod.pem" \
+    -extfile <(printf "subjectAltName=DNS:%s,DNS:%s" "$fqdn" "$pod") 2>/dev/null
   rm -f "$OUT/$pod.csr"
 done
 

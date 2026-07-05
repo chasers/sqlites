@@ -28,6 +28,9 @@ kubectl apply -k deploy/overlays/kind 2>/dev/null || true
 kubectl wait --for condition=established crd/sqlitenodes.sqlites.supabase.com --timeout=60s
 kubectl apply -k deploy/overlays/kind
 
+echo "==> restarting workloads so reloaded :dev images take effect"
+kubectl -n sqlites rollout restart statefulset/sqlites deployment/sqlites-operator
+
 echo "==> waiting for postgres"
 kubectl -n sqlites rollout status statefulset/postgres --timeout=180s
 
