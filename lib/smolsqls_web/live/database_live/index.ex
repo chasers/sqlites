@@ -215,6 +215,53 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
     SmolsqlsWeb.Endpoint.url() <> "/v1/databases/#{database.id}/query"
   end
 
+  defp libsql_url do
+    uri = URI.parse(SmolsqlsWeb.Endpoint.url())
+    scheme = if uri.scheme == "https", do: "wss", else: "ws"
+    "#{scheme}://#{uri.host}:#{uri.port}"
+  end
+
+  defp curl_examples(database, token) do
+    url = query_url(database)
+
+    """
+    # create a table
+    curl -X POST #{url} \\
+      -H "Authorization: Bearer #{token}" \\
+      -H "Content-Type: application/json" \\
+      -d '{"sql":"CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY, name TEXT)"}'
+
+    # insert a row (parameterized — no SQL quoting pitfalls)
+    curl -X POST #{url} \\
+      -H "Authorization: Bearer #{token}" \\
+      -H "Content-Type: application/json" \\
+      -d '{"sql":"INSERT INTO items (name) VALUES (?)","args":["first item"]}'\
+    """
+  end
+
+  defp ts_example(token) do
+    """
+    // npm i @libsql/client
+    import { createClient } from "@libsql/client";
+
+    const client = createClient({
+      url: "#{libsql_url()}",
+      authToken: "#{token}",
+    });
+
+    await client.execute(
+      "CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY, name TEXT)",
+    );
+    await client.execute({
+      sql: "INSERT INTO items (name) VALUES (?)",
+      args: ["first item"],
+    });
+
+    const { rows } = await client.execute("SELECT * FROM items");
+    console.log(rows);\
+    """
+  end
+
   defp first_revealed_secret(tokens, revealed_secrets) do
     Enum.find_value(tokens, fn token ->
       if ControlPlane.token_usable?(token), do: revealed_secrets[token.id]
@@ -380,6 +427,17 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
                   <code class="block rounded-md border border-base-300 bg-base-100 p-2 font-mono text-xs break-all">
                     {query_url(database)}
                   </code>
+                </div>
+                <% token = first_revealed_secret(@tokens, @revealed_secrets) || "<your-token>" %>
+                <div>
+                  <div class="text-xs text-base-content/60 mb-1">Quickstart — curl</div>
+                  <pre class="overflow-x-auto rounded-md border border-base-300 bg-base-100 p-3 font-mono text-xs leading-relaxed"><code>{curl_examples(database, token)}</code></pre>
+                </div>
+                <div>
+                  <div class="text-xs text-base-content/60 mb-1">
+                    Quickstart — TypeScript (<code class="font-mono">@libsql/client</code>)
+                  </div>
+                  <pre class="overflow-x-auto rounded-md border border-base-300 bg-base-100 p-3 font-mono text-xs leading-relaxed"><code>{ts_example(token)}</code></pre>
                 </div>
                 <div>
                   <div class="text-xs text-base-content/60 mb-1">Backups</div>
