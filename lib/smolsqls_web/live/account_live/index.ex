@@ -99,7 +99,7 @@ defmodule SmolsqlsWeb.AccountLive.Index do
     ~H"""
     <Layouts.app flash={@flash}>
       <div class="mx-auto max-w-4xl space-y-8 py-8">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 class="text-xl font-semibold tracking-tight">{@tenant.name}</h1>
             <p class="text-sm text-base-content/60">Account API keys</p>
@@ -138,9 +138,9 @@ defmodule SmolsqlsWeb.AccountLive.Index do
             :for={key <- @keys}
             class="card border border-base-300 bg-base-200"
           >
-            <div class="card-body flex-row items-center justify-between gap-2 py-3">
+            <div class="card-body flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div class="min-w-0 flex-1 space-y-1">
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                   <span class="font-mono text-sm font-medium">{key.name || "unnamed"}</span>
                   <span class={[
                     "badge badge-xs badge-soft",
@@ -165,7 +165,7 @@ defmodule SmolsqlsWeb.AccountLive.Index do
                   <button
                     type="button"
                     class="btn btn-ghost btn-xs"
-                    phx-hook="Copy"
+                    phx-hook=".Copy"
                     id={"copy-#{key.id}"}
                     data-copy-target={"secret-#{key.id}"}
                   >

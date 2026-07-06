@@ -67,7 +67,7 @@ defmodule SmolsqlsWeb.CoreComponents do
       {@rest}
     >
       <div class={[
-        "alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
+        "alert w-80 max-w-[calc(100vw-2rem)] sm:w-96 sm:max-w-96 text-wrap",
         @kind == :info && "border-base-300 bg-base-200 text-base-content",
         @kind == :error && "alert-error alert-soft border-error/30"
       ]}>

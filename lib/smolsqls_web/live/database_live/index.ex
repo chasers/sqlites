@@ -226,7 +226,7 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
     ~H"""
     <Layouts.app flash={@flash}>
       <div class="mx-auto max-w-4xl space-y-8 py-8">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 class="text-xl font-semibold tracking-tight">{@tenant.name}</h1>
             <p class="text-sm text-base-content/60">{length(@databases)} database(s) loaded</p>
@@ -260,9 +260,9 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
         <div class="space-y-3">
           <div :for={database <- @databases} class="card border border-base-300 bg-base-200">
             <div class="card-body space-y-2">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                  <span class="font-mono text-sm font-medium">{database.name}</span>
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                  <span class="font-mono text-sm font-medium break-all">{database.name}</span>
                   <span class={[
                     "badge badge-sm badge-soft",
                     database.status == :active && "badge-success",
@@ -275,7 +275,7 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
                     {database.node}
                   </span>
                 </div>
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2">
                   <button
                     class="btn btn-ghost btn-sm"
                     phx-click="toggle_connection"
@@ -302,10 +302,10 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
                   <ul class="space-y-1" id={"tokens-#{database.id}"}>
                     <li
                       :for={token <- @tokens}
-                      class="flex items-center justify-between gap-2 rounded-md border border-base-300 bg-base-100 p-2"
+                      class="flex flex-col gap-2 rounded-md border border-base-300 bg-base-100 p-2 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div class="min-w-0 flex-1">
-                        <div class="flex items-center gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
                           <span class="font-mono text-xs">{token.name || "unnamed"}</span>
                           <span class={[
                             "badge badge-xs badge-soft",
@@ -387,7 +387,10 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
                     No backups yet.
                   </p>
                   <ul class="space-y-1">
-                    <li :for={backup <- @backups} class="flex items-center justify-between gap-2">
+                    <li
+                      :for={backup <- @backups}
+                      class="flex flex-wrap items-center justify-between gap-2"
+                    >
                       <span class="font-mono text-xs">
                         {Calendar.strftime(backup.inserted_at, "%Y-%m-%d %H:%M:%S UTC")} · {backup.size_bytes} bytes
                       </span>
