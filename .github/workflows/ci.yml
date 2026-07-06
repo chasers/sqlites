@@ -29,8 +29,40 @@ jobs:
           restore-keys: mix-${{ runner.os }}-
 
       - run: mix deps.get
-      - name: Compile, format, lint, security & dependency audit
+      - name: Compile, format, lint, security, audit & architecture
         run: mix ci
+      - name: Duplication report (advisory)
+        run: mix ex_dna
+        continue-on-error: true
+
+  dialyzer:
+    name: Dialyzer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.0.2"
+          elixir-version: "1.20.2"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          restore-keys: mix-${{ runner.os }}-
+
+      - name: Cache PLTs
+        uses: actions/cache@v4
+        with:
+          path: priv/plts
+          key: plt-${{ runner.os }}-otp29.0.2-elixir1.20.2-${{ hashFiles('mix.lock') }}
+          restore-keys: plt-${{ runner.os }}-otp29.0.2-elixir1.20.2-
+
+      - run: mix deps.get
+      - run: mix dialyzer
 
   app-tests:
     name: App tests

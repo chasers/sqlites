@@ -11,7 +11,14 @@ defmodule Smolsqls.MixProject do
       aliases: aliases(),
       deps: deps(),
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
-      listeners: [Phoenix.CodeReloader]
+      listeners: [Phoenix.CodeReloader],
+      dialyzer: [
+        plt_local_path: "priv/plts",
+        plt_core_path: "priv/plts",
+        plt_file: {:no_warn, "priv/plts/project.plt"},
+        ignore_warnings: ".dialyzer_ignore.exs",
+        list_unused_filters: true
+      ]
     ]
   end
 
@@ -72,7 +79,10 @@ defmodule Smolsqls.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
       {:sobelow, "~> 0.14", only: [:dev, :test], runtime: false},
-      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false}
+      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
+      {:reach, "~> 2.7", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -109,7 +119,8 @@ defmodule Smolsqls.MixProject do
         "format --check-formatted",
         "credo --strict",
         "deps.audit",
-        "sobelow"
+        "sobelow",
+        "reach.check --arch"
       ]
     ]
   end

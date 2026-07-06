@@ -250,10 +250,23 @@ mix ci         # non-mutating superset CI runs (no DB needed)
 (warnings-as-errors) → `deps.unlock --check-unused` → `format
 --check-formatted` → `credo --strict` (with the [ExSlop](https://github.com/elixir-vibe/ex_slop)
 plugin's AI-slop checks) → `deps.audit` → `sobelow` (security scan,
-`.sobelow-conf` holds accepted skips). CI runs it as a fast, Postgres-free
-`checks` job in parallel with the test jobs; the `operator/` subproject has
-its own `mix ci` and test job. See the CI workflow in
-`.github/workflows/ci.yml`.
+`.sobelow-conf` holds accepted skips) → `reach.check --arch`
+([Reach](https://github.com/elixir-vibe/reach) layer policy in `.reach.exs`:
+the data/control/read planes must not depend on the web layer). CI runs it as
+a fast, Postgres-free `checks` job in parallel with the test jobs; the
+`operator/` subproject has its own `mix ci` and test job.
+
+Two more checks run in their own CI jobs (not in `mix ci`, so the fast gate
+stays fast):
+
+```sh
+mix dialyzer   # type analysis; PLT cached in CI on {OTP, Elixir, mix.lock}
+mix ex_dna     # duplication report ([ExDNA](https://github.com/elixir-vibe/ex_dna), advisory)
+```
+
+Dialyzer gates (ignore file: `.dialyzer_ignore.exs`); ExDNA is advisory for now
+(`.ex_dna.exs`), to be ratcheted to a `--max-clones` budget once its count is
+stable. See `.github/workflows/ci.yml`.
 
 ## Repo layout
 

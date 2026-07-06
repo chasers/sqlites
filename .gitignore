@@ -45,3 +45,6 @@ npm-debug.log
 /.elixir_ls/
 /.claude/settings.local.json
 deploy/overlays/kind/tls/
+
+# Dialyzer PLTs
+/priv/plts/
