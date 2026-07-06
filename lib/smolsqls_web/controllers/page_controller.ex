@@ -2,7 +2,7 @@ defmodule SmolsqlsWeb.PageController do
   use SmolsqlsWeb, :controller
 
   def home(conn, _params) do
-    render(conn, :home, limits: platform_limits())
+    render(conn, :home, limits: platform_limits(), page_title: "Multitenant SQLite")
   end
 
   defp platform_limits do

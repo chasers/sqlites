@@ -1,23 +1,28 @@
 <Layouts.app flash={@flash}>
   <div class="mx-auto max-w-xl space-y-10 py-16">
-    <div class="text-center space-y-3">
-      <h1 class="text-4xl font-bold">smolsqls</h1>
-      <p class="text-base-content/70">
+    <div class="space-y-4 text-center">
+      <h1 class="text-4xl font-semibold tracking-tight">
+        Ship with SQLite <span class="text-accent">in seconds</span>
+      </h1>
+      <p class="text-base text-base-content/60">
         Multitenant SQLite databases with one writer per file, placed across an
         Elixir cluster. Create a database, get a connection string, start querying.
       </p>
     </div>
 
-    <div class="card bg-base-200">
+    <div class="card border border-base-300 bg-base-200">
       <div class="card-body space-y-4">
-        <h2 class="card-title">Sign in with your API key</h2>
+        <div>
+          <h2 class="text-sm font-medium">Sign in</h2>
+          <p class="text-sm text-base-content/60">Use your account API key.</p>
+        </div>
         <form action={~p"/login"} method="post" class="flex gap-2">
           <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
           <input
             type="password"
             name="api_key"
             placeholder="sk_..."
-            class="input input-bordered flex-1"
+            class="input input-bordered flex-1 font-mono text-sm"
             required
           />
           <button class="btn btn-primary">Sign in</button>
@@ -25,9 +30,14 @@
       </div>
     </div>
 
-    <div class="card bg-base-200">
+    <div class="card border border-base-300 bg-base-200">
       <div class="card-body space-y-4">
-        <h2 class="card-title">New here? Create a tenant</h2>
+        <div>
+          <h2 class="text-sm font-medium">New here? Create a tenant</h2>
+          <p class="text-sm text-base-content/60">
+            One tenant per organization — you get an API key back.
+          </p>
+        </div>
         <form action={~p"/signup"} method="post" class="space-y-2">
           <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
           <input
@@ -41,29 +51,32 @@
             type="text"
             name="slug"
             placeholder="slug (lowercase, dashes)"
-            class="input input-bordered w-full"
-            pattern="[a-z0-9][a-z0-9-]*"
+            class="input input-bordered w-full font-mono text-sm"
+            pattern="[a-z0-9][a-z0-9\-]*"
             required
           />
           <button class="btn btn-primary w-full">Create tenant</button>
         </form>
         <p class="text-sm text-base-content/60">
-          Agents can do this over the API instead: <code class="font-mono">POST /v1/tenants</code>
-          — see <a href="/v1" class="link">the API index</a>.
+          Agents can do this over the API instead:
+          <code class="font-mono text-accent">POST /v1/tenants</code>
+          — see <a href="/v1" class="link link-hover">the API index</a>.
         </p>
       </div>
     </div>
 
-    <div class="card bg-base-200">
+    <div class="card border border-base-300 bg-base-200">
       <div class="card-body space-y-2">
-        <h2 class="card-title">Platform limits</h2>
-        <p class="text-sm text-base-content/60">
-          What every account gets by default.
-        </p>
-        <ul class="text-sm text-base-content/80 divide-y divide-base-300">
-          <li :for={{label, value} <- @limits} class="flex justify-between gap-4 py-1.5">
-            <span>{label}</span>
-            <span class="font-mono">{value}</span>
+        <div>
+          <h2 class="text-sm font-medium">Platform limits</h2>
+          <p class="text-sm text-base-content/60">
+            What every account gets by default.
+          </p>
+        </div>
+        <ul class="divide-y divide-base-300 text-sm">
+          <li :for={{label, value} <- @limits} class="flex justify-between gap-4 py-2">
+            <span class="text-base-content/80">{label}</span>
+            <span class="font-mono text-xs text-base-content/60">{value}</span>
           </li>
         </ul>
       </div>

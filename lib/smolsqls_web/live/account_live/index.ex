@@ -101,7 +101,7 @@ defmodule SmolsqlsWeb.AccountLive.Index do
       <div class="mx-auto max-w-4xl space-y-8 py-8">
         <div class="flex items-center justify-between">
           <div>
-            <h1 class="text-2xl font-bold">{@tenant.name}</h1>
+            <h1 class="text-xl font-semibold tracking-tight">{@tenant.name}</h1>
             <p class="text-sm text-base-content/60">Account API keys</p>
           </div>
           <div class="flex items-center gap-2">
@@ -113,9 +113,9 @@ defmodule SmolsqlsWeb.AccountLive.Index do
           </div>
         </div>
 
-        <div class="card bg-base-200">
+        <div class="card border border-base-300 bg-base-200">
           <div class="card-body">
-            <h2 class="card-title text-base">New API key</h2>
+            <h2 class="text-sm font-medium">New API key</h2>
             <p class="text-sm text-base-content/60">
               Account keys authenticate the management API and this dashboard.
               The secret is shown once on creation — reveal or copy it before leaving.
@@ -136,14 +136,14 @@ defmodule SmolsqlsWeb.AccountLive.Index do
         <ul class="space-y-2">
           <li
             :for={key <- @keys}
-            class="card bg-base-200"
+            class="card border border-base-300 bg-base-200"
           >
             <div class="card-body flex-row items-center justify-between gap-2 py-3">
               <div class="min-w-0 flex-1 space-y-1">
                 <div class="flex items-center gap-2">
-                  <span class="font-mono text-sm font-semibold">{key.name || "unnamed"}</span>
+                  <span class="font-mono text-sm font-medium">{key.name || "unnamed"}</span>
                   <span class={[
-                    "badge badge-xs",
+                    "badge badge-xs badge-soft",
                     (key.enabled && "badge-success") || "badge-error"
                   ]}>
                     {if(key.enabled, do: "enabled", else: "disabled")}
@@ -158,7 +158,7 @@ defmodule SmolsqlsWeb.AccountLive.Index do
                 >
                   <code
                     id={"secret-#{key.id}"}
-                    class="block flex-1 font-mono text-xs break-all bg-base-300 rounded p-2"
+                    class="block flex-1 rounded-md border border-base-300 bg-base-100 p-2 font-mono text-xs break-all"
                   >
                     {@revealed_secrets[key.id]}
                   </code>

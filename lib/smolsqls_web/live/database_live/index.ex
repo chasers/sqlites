@@ -228,7 +228,7 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
       <div class="mx-auto max-w-4xl space-y-8 py-8">
         <div class="flex items-center justify-between">
           <div>
-            <h1 class="text-2xl font-bold">{@tenant.name}</h1>
+            <h1 class="text-xl font-semibold tracking-tight">{@tenant.name}</h1>
             <p class="text-sm text-base-content/60">{length(@databases)} database(s) loaded</p>
           </div>
           <div class="flex items-center gap-2">
@@ -240,16 +240,16 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
           </div>
         </div>
 
-        <div class="card bg-base-200">
+        <div class="card border border-base-300 bg-base-200">
           <div class="card-body">
-            <h2 class="card-title text-base">New database</h2>
+            <h2 class="text-sm font-medium">New database</h2>
             <.form for={@new_database_form} phx-submit="create" class="flex gap-2">
               <input
                 type="text"
                 name="name"
                 value={@new_database_form[:name].value}
                 placeholder="database name (lowercase, dashes, underscores)"
-                class="input input-bordered flex-1"
+                class="input input-bordered flex-1 font-mono text-sm"
                 required
               />
               <button class="btn btn-primary">Create</button>
@@ -258,13 +258,13 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
         </div>
 
         <div class="space-y-3">
-          <div :for={database <- @databases} class="card bg-base-200">
+          <div :for={database <- @databases} class="card border border-base-300 bg-base-200">
             <div class="card-body space-y-2">
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                  <span class="font-mono font-semibold">{database.name}</span>
+                  <span class="font-mono text-sm font-medium">{database.name}</span>
                   <span class={[
-                    "badge badge-sm",
+                    "badge badge-sm badge-soft",
                     database.status == :active && "badge-success",
                     database.status == :pending && "badge-warning",
                     database.status == :deleting && "badge-error"
@@ -302,13 +302,13 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
                   <ul class="space-y-1" id={"tokens-#{database.id}"}>
                     <li
                       :for={token <- @tokens}
-                      class="flex items-center justify-between gap-2 bg-base-300 rounded p-2"
+                      class="flex items-center justify-between gap-2 rounded-md border border-base-300 bg-base-100 p-2"
                     >
                       <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2">
                           <span class="font-mono text-xs">{token.name || "unnamed"}</span>
                           <span class={[
-                            "badge badge-xs",
+                            "badge badge-xs badge-soft",
                             (token.enabled && "badge-success") || "badge-error"
                           ]}>
                             {if(token.enabled, do: "enabled", else: "disabled")}
@@ -369,7 +369,7 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
                 </div>
                 <div :if={secret = first_revealed_secret(@tokens, @revealed_secrets)}>
                   <div class="text-xs text-base-content/60 mb-1">libSQL connection string</div>
-                  <code class="block bg-base-300 rounded p-2 font-mono break-all">
+                  <code class="block rounded-md border border-base-300 bg-base-100 p-2 font-mono text-xs break-all">
                     {connection_string(database, secret)}
                   </code>
                 </div>
@@ -377,7 +377,7 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
                   <div class="text-xs text-base-content/60 mb-1">
                     HTTP — POST with Authorization: Bearer &lt;token&gt;
                   </div>
-                  <code class="block bg-base-300 rounded p-2 font-mono break-all">
+                  <code class="block rounded-md border border-base-300 bg-base-100 p-2 font-mono text-xs break-all">
                     {query_url(database)}
                   </code>
                 </div>
