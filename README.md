@@ -80,6 +80,20 @@ job.
   `{"sql": "...", "args": [...]}` and the database auth token as a
   Bearer token.
 
+**Tenant SQL is sandboxed** on the shared per-database connection. Every
+tenant statement runs under a SQLite authorizer that denies `ATTACH`,
+`DETACH`, and therefore `VACUUM` — closing cross-tenant and arbitrary
+host-file access (and `VACUUM INTO` writes). Native extension loading is
+explicitly disabled (`load_extension(...)` is rejected). The authorizer is
+scoped to tenant statements only; privileged snapshots (backups, idle ships)
+run `VACUUM INTO` through a separate unauthorized path
+(`Server.snapshot_into/3`). Two residual gaps remain, both confined to the
+tenant's own database (not cross-tenant escapes): tenant
+`PRAGMA max_page_count` (size-cap evasion for the hot session) and
+`PRAGMA writable_schema` (schema self-corruption). Robustly closing them needs
+`SQLITE_DBCONFIG_DEFENSIVE`/`SQLITE_LIMIT`, which exqlite's API does not yet
+expose.
+
 **Quotas & limits** are rows, not config: a `limits` map on `tenants`
 with per-database overrides on `databases`, falling back to cluster
 defaults (`config :smolsqls, Smolsqls.Limits`). Resolution is
