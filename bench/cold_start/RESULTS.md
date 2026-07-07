@@ -70,6 +70,34 @@ in prod because the default `max_size_bytes` is **1 GiB**
 (`config :smolsqls, Smolsqls.Limits`), so a legitimately-sized database that
 goes cold could previously OOM its node on the next request.
 
+## Compression (gzip in the object store)
+
+Objects are now stored **gzip-compressed**, transparently and streaming in
+both directions (`ObjectStore.S3`): `put_file` deflates the source to a temp
+and uploads it with the uncompressed length in `x-amz-meta-logical-length`;
+`fetch_to_file` streams the object into a `.partial`, then — if the gzip
+magic bytes are present — `safeInflate`s it to disk in bounded increments
+(so an extreme ratio can't balloon memory), else renames it (objects written
+before compression still restore). Validated in-cluster:
+
+| check | result |
+|---|---|
+| 1 GB synthetic round-trip | ratio **402×** (1001 MB → 2.49 MB), restores `[[1000]]`, **0 pod restarts** |
+| back-compat | a raw (pre-gzip) object restores byte-identical |
+| `size_bytes` = logical | `put_file` **and** server-side `copy` both report 5,000,000 (metadata preserved through COPY) |
+| incompressible data | 5 MB random → 5.0 MB stored (~1×, gzip framing overhead only) |
+
+**Caveat — the sweep above predates compression, and the synthetic blob data
+is not representative for it.** The bench fills with a repeated byte, which
+gzips ~400× — so with compression on, the 1 GB restore is now dominated by
+*decompression CPU* (~5.3s to inflate 1 GB from 2.49 MB) rather than
+transfer, and on loopback MinIO that makes the synthetic restore *slower*
+than the uncompressed 1.73s. Real databases compress ~2–4×, so inflate cost
+is proportionally small; the primary, unambiguous win is **S3 storage +
+transfer bytes** (and, against real cross-AZ/region S3 where bytes dominate
+latency, faster cold pulls). zstd would give a better ratio at lower CPU if
+that tradeoff ever bites — noted in the tracker.
+
 ## Environment caveats
 
 - Numbers are from a single kind node under memory pressure (minio has 36

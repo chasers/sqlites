@@ -40,7 +40,12 @@ node volumes are caches. When a database server idle-stops, it ships a
 `idle-snapshots/<tenant>/<db>/latest.db` and bumps a
 `snapshot_generation` in the metadb. (Every session ships — skipping
 the upload for read-only sessions is deferred until statements can be
-classified by a real SQL parser rather than heuristics.) Activation
+classified by a real SQL parser rather than heuristics.) Objects are
+stored gzip-compressed, transparently and streaming in both directions
+(the S3 adapter compresses on ship and decompresses on restore, so
+callers only see logical files and memory stays bounded regardless of
+database size); reads fall back to raw for objects written before
+compression. Activation
 trusts placement + generation, never bare file
 presence: a cached file whose `<file>.generation` sidecar is behind
 the metadb is discarded and re-fetched, and a missing file restores
