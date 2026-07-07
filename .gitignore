@@ -49,8 +49,5 @@ npm-debug.log
 /.claude/settings.local.json
 deploy/overlays/kind/tls/
 
-# Dialyzer PLTs
-/priv/plts/
-
 # Repo-local scoped kubeconfig (pins kubectl to kind-smolsqls; holds a client key).
 .kube/
