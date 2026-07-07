@@ -13,6 +13,7 @@ defmodule Smolsqls.MixProject do
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
       listeners: [Phoenix.CodeReloader],
       dialyzer: [
+        plt_add_apps: [:ex_unit, :mix],
         plt_local_path: "priv/plts",
         plt_core_path: "priv/plts",
         plt_file: {:no_warn, "priv/plts/project.plt"},
