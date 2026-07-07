@@ -46,7 +46,9 @@ npm-debug.log
 
 # Editor/tooling state.
 /.elixir_ls/
-/.claude/settings.local.json
+# Per-user Claude Code dir: skills live in skills/ and are symlinked in locally
+# (see skills/README.md); nothing under .claude/ is committed.
+/.claude/
 deploy/overlays/kind/tls/
 
 # Repo-local scoped kubeconfig (pins kubectl to kind-smolsqls; holds a client key).

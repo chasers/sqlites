@@ -298,4 +298,5 @@ lib/smolsqls_web/controllers/  # REST API (see GET /v1 for the index)
 lib/smolsqls_web/hrana/        # Hrana (libSQL) WebSocket endpoint
 lib/smolsqls_web/live/         # LiveView dashboard
 operator/                     # Bonny-based Kubernetes operator (SqliteDatabase CRD)
+skills/                       # Claude Code skills (run skills/install.sh to link them in; see skills/README.md)
 ```
