@@ -26,9 +26,18 @@ ln -s "$PWD/skills/query-alpha-db" ~/.claude/skills/query-alpha-db    # global
 
 ## Skills
 
-- **`query-alpha-db`** — run SQL against a live database on the smolsqls alpha
-  deployment (`https://alpha.smolsqls.com`) over the HTTP query API. Credentials
-  come from environment variables; nothing secret is committed.
+- **`query-db`** — the shared Elixir query tool (`query-db/smolsqls_query.exs`)
+  for running SQL against any smolsqls database over the HTTP API. The primitive
+  the other two build on.
+- **`query-alpha-db`** — the alpha deployment's context: auth model, provisioning
+  (tenant/db), live-data safety. Querying itself = `query-db --db alpha`.
+- **`smolsqls-pm`** — project tracker (projects · plans · tasks) for this repo,
+  stored in a dedicated smolsqls DB on alpha. Where plans live now.
+
+`query-db` is an Elixir project's tool, so we query in Elixir. It's
+self-contained via `Mix.install` (needs `elixir` on `PATH`; the first run
+fetches Req). Credentials come from the environment (git-ignored `.claude/*.env`,
+auto-loaded); nothing secret is committed.
 
 ## Adding a skill
 
