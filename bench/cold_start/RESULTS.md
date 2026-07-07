@@ -39,28 +39,36 @@ a 200-concurrent storm) is the real single-request cold-start number;
 | ~1 MB | 984 KiB | 5.7ms | 5.9ms | 5.9ms | 5 |
 | ~10 MB | 9.6 MiB | 26.9ms | 28.0ms | 28.0ms | 5 |
 | ~100 MB | 95.5 MiB | 229.9ms | 237.3ms | 237.3ms | 4 |
-| ~1 GB | — | **OOMKilled** | — | — | 0/2 |
+| ~1 GB | 0.93 GiB | 1.73s | 1.81s | 1.81s | 2 |
 
 Below ~1 MB the cost is a fixed **~4–7ms floor** — activation, syn
 registration, an 8 KB MinIO GET, opening the connection. Above ~10 MB it is
-bytes-dominated at roughly **~2.3ms/MiB** (10 MiB → 27ms, 100 MiB → 230ms),
-consistent with in-cluster network + `File.write!` throughput.
+bytes-dominated at roughly **~2.0ms/MiB** (10 MiB → 27ms, 100 MiB → 230ms,
+0.93 GiB → 1.73s), consistent with in-cluster network + disk-write
+throughput.
 
-### ~1 GB OOM-kills the owning pod (`exit 137`)
+Empty → 100 MB were measured on the pre-fix build; the 1 GB row is post-fix
+(see below). Streaming to disk vs buffering is the same I/O for small files —
+the fix changes memory, not latency — so the small-bucket numbers stand.
 
-The 1 GB bucket **could not complete**: restoring it OOM-killed `smolsqls-0`
-(`OOMKilled`, exit 137, restart 19→20), which recovered afterward.
-`Smolsqls.ObjectStore.S3.fetch_to_file/2` reads the **entire object into a
+### ~1 GB used to OOM-kill the owning pod — fixed by streaming
+
+Before the fix, the 1 GB bucket **could not complete**: restoring it
+OOM-killed `smolsqls-0` (`OOMKilled`, exit 137, restart 19→20).
+`Smolsqls.ObjectStore.S3.fetch_to_file/2` read the **entire object into a
 single in-memory binary** (`Req.get(...) |> body` then `File.write!`), so a
-cold pull's peak memory is ~the db size. On this ~3.9 GiB node a 1 GB body is
-fatal.
+cold pull's peak memory was ~the db size — fatal for a 1 GB db on this
+~3.9 GiB node. The **ship** side (`put_file/2`, `File.read!` + `Req.put
+body:`) had the same flaw and would OOM first, on `idle_stop`.
 
-This is not just a bench-rig limit: the default `max_size_bytes` is **1 GiB**
+Both paths now **stream**: the restore downloads into a `.partial` file via
+`Req … into: File.stream!` and atomically renames on success; the ship
+uploads with `body: File.stream!(path, 1 MiB)` + explicit `content-length`
+(`UNSIGNED-PAYLOAD` sigv4). The full 1 GB cycle now completes with **0 pod
+restarts** — ship ~3.8s, restore ~1.7s, `[[1000]]` rows intact. This matters
+in prod because the default `max_size_bytes` is **1 GiB**
 (`config :smolsqls, Smolsqls.Limits`), so a legitimately-sized database that
-goes cold and is then requested can OOM its owning node on restore. Fixing it
-needs a **streaming** restore (stream the S3 body straight to disk instead of
-buffering) — filed as a task under the `benchmarks` → `cold-start-bench` plan
-in the `smolsqls-pm` tracker.
+goes cold could previously OOM its node on the next request.
 
 ## Environment caveats
 

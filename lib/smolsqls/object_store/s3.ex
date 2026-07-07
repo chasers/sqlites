@@ -10,10 +10,14 @@ defmodule Smolsqls.ObjectStore.S3 do
 
   @impl true
   def put_file(key, source_path) do
-    body = File.read!(source_path)
+    %File.Stat{size: size} = File.stat!(source_path)
 
-    case Req.put(request(), url: "s3://#{bucket()}/#{key}", body: body) do
-      {:ok, %{status: status}} when status in 200..299 -> {:ok, byte_size(body)}
+    case Req.put(request(),
+           url: "s3://#{bucket()}/#{key}",
+           headers: [content_length: size],
+           body: File.stream!(source_path, 1_048_576)
+         ) do
+      {:ok, %{status: status}} when status in 200..299 -> {:ok, size}
       {:ok, %{status: status, body: body}} -> {:error, {:s3_status, status, body}}
       {:error, reason} -> {:error, reason}
     end
@@ -21,19 +25,25 @@ defmodule Smolsqls.ObjectStore.S3 do
 
   @impl true
   def fetch_to_file(key, dest_path) do
-    case Req.get(request(), url: "s3://#{bucket()}/#{key}", raw: true) do
-      {:ok, %{status: 200, body: body}} ->
-        File.mkdir_p!(Path.dirname(dest_path))
-        File.write!(dest_path, body)
+    File.mkdir_p!(Path.dirname(dest_path))
+    partial = dest_path <> ".partial"
+
+    case Req.get(request(), url: "s3://#{bucket()}/#{key}", raw: true, into: File.stream!(partial)) do
+      {:ok, %{status: 200}} ->
+        File.rename!(partial, dest_path)
         :ok
 
       {:ok, %{status: 404}} ->
+        File.rm(partial)
         {:error, :not_found}
 
-      {:ok, %{status: status, body: body}} ->
-        {:error, {:s3_status, status, body}}
+      {:ok, %{status: status}} ->
+        error = File.read!(partial)
+        File.rm(partial)
+        {:error, {:s3_status, status, error}}
 
       {:error, reason} ->
+        File.rm(partial)
         {:error, reason}
     end
   end

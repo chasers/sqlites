@@ -96,5 +96,6 @@ same telemetry/noise caveat as the local table.
   local-FS numbers here are lower bounds. Solo cold-restore latency
   against real MinIO/S3 is now measured in
   [`bench/cold_start/RESULTS.md`](../cold_start/RESULTS.md), which also
-  found that a ~1 GB cold pull OOM-kills the owning pod (the S3 restore
-  buffers the whole object in memory).
+  found (and fixed) a ~1 GB cold pull OOM-killing the owning pod — the S3
+  restore/ship now stream to/from disk instead of buffering the whole
+  object in memory.
