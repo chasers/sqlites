@@ -33,23 +33,35 @@ snapshot to MinIO), wipe the local file on the **owning node**, then time the
 a 200-concurrent storm) is the real single-request cold-start number;
 `bench/qps/activation_restore.exs` covers aggregate throughput under a storm.
 
-| db size | restored on-disk | p50 | p99 | max | n |
-|---|---|---|---|---|---|
-| empty | 8 KB | 4.3ms | 7.0ms | 7.0ms | 5 |
-| ~1 MB | 984 KiB | 5.7ms | 5.9ms | 5.9ms | 5 |
-| ~10 MB | 9.6 MiB | 26.9ms | 28.0ms | 28.0ms | 5 |
-| ~100 MB | 95.5 MiB | 229.9ms | 237.3ms | 237.3ms | 4 |
-| ~1 GB | 0.93 GiB | 1.73s | 1.81s | 1.81s | 2 |
+Measured on the current build (streaming + gzip) with **realistic** row data
+— typed relational rows (int id, a random uuid/hash, vocabulary text for
+name/email/note, ISO timestamps, a numeric amount) so it compresses like a
+real database rather than a synthetic extreme. `logical` is the on-disk db
+size; `on S3` is the gzipped object actually shipped/pulled.
 
-Below ~1 MB the cost is a fixed **~4–7ms floor** — activation, syn
-registration, an 8 KB MinIO GET, opening the connection. Above ~10 MB it is
-bytes-dominated at roughly **~2.0ms/MiB** (10 MiB → 27ms, 100 MiB → 230ms,
-0.93 GiB → 1.73s), consistent with in-cluster network + disk-write
-throughput.
+| db size | logical | on S3 | ratio | restore p50 | p99 | n |
+|---|---|---|---|---|---|---|
+| empty | 8 KB | 216 B | — | 4.0ms | 8.6ms | 5 |
+| ~1 MB | 992 KiB | 281 KiB | 3.5× | 11.5ms | 16.2ms | 5 |
+| ~10 MB | 9.7 MiB | 2.7 MiB | 3.5× | 92.3ms | 100.7ms | 5 |
+| ~100 MB | 95.5 MiB | 27.2 MiB | 3.5× | 731.7ms | 804.4ms | 4 |
+| ~1 GB | 954 MiB | 271 MiB | 3.5× | 8.22s | 8.22s | 2 |
 
-Empty → 100 MB were measured on the pre-fix build; the 1 GB row is post-fix
-(see below). Streaming to disk vs buffering is the same I/O for small files —
-the fix changes memory, not latency — so the small-bucket numbers stand.
+The data compresses a steady **~3.5×**, so a cold db costs ~3.5× less to
+store and to pull over the wire. Below ~1 MB the restore is a fixed **~4ms
+floor** — activation, syn registration, a small MinIO GET, opening the
+connection. Above ~10 MB it is dominated by decompression + writing the full
+logical size to disk, roughly **~8ms per logical MiB**.
+
+**On this loopback network gzip makes the restore slower, not faster.** The
+pre-gzip streaming path ran ~2.0ms/logical-MiB (100 MiB → 230ms, 1 GiB →
+1.73s); with gzip the same 1 GiB is 8.22s, because you download 3.5× fewer
+bytes but still inflate and write the full 954 MiB — and on same-node MinIO
+the bytes you saved were nearly free to move. The win is **S3 storage +
+transfer cost** (3.5× less), and cold-pull *latency* only turns positive when
+the network is the bottleneck — real cross-AZ/region S3, where moving 271 MB
+instead of 954 MB outweighs the inflate CPU. See
+[Compression](#compression-gzip-in-the-object-store).
 
 ### ~1 GB used to OOM-kill the owning pod — fixed by streaming
 
@@ -65,8 +77,9 @@ Both paths now **stream**: the restore downloads into a `.partial` file via
 `Req … into: File.stream!` and atomically renames on success; the ship
 uploads with `body: File.stream!(path, 1 MiB)` + explicit `content-length`
 (`UNSIGNED-PAYLOAD` sigv4). The full 1 GB cycle now completes with **0 pod
-restarts** — ship ~3.8s, restore ~1.7s, `[[1000]]` rows intact. This matters
-in prod because the default `max_size_bytes` is **1 GiB**
+restarts** — ship ~3.8s, restore ~1.7s (measured pre-gzip; the sweep above
+has the current compressed numbers), `[[1000]]` rows intact. This matters in
+prod because the default `max_size_bytes` is **1 GiB**
 (`config :smolsqls, Smolsqls.Limits`), so a legitimately-sized database that
 goes cold could previously OOM its node on the next request.
 
@@ -82,21 +95,20 @@ before compression still restore). Validated in-cluster:
 
 | check | result |
 |---|---|
-| 1 GB synthetic round-trip | ratio **402×** (1001 MB → 2.49 MB), restores `[[1000]]`, **0 pod restarts** |
-| back-compat | a raw (pre-gzip) object restores byte-identical |
+| extreme-ratio stress | a **402×** object (1001 MB from 2.49 MB, repeated byte) restores `[[1000]]` with **0 pod restarts** — bounded `safeInflate` neutralizes the decompression-bomb path |
+| back-compat | a raw (pre-gzip) object restores byte-identical (magic-byte fallback) |
 | `size_bytes` = logical | `put_file` **and** server-side `copy` both report 5,000,000 (metadata preserved through COPY) |
 | incompressible data | 5 MB random → 5.0 MB stored (~1×, gzip framing overhead only) |
 
-**Caveat — the sweep above predates compression, and the synthetic blob data
-is not representative for it.** The bench fills with a repeated byte, which
-gzips ~400× — so with compression on, the 1 GB restore is now dominated by
-*decompression CPU* (~5.3s to inflate 1 GB from 2.49 MB) rather than
-transfer, and on loopback MinIO that makes the synthetic restore *slower*
-than the uncompressed 1.73s. Real databases compress ~2–4×, so inflate cost
-is proportionally small; the primary, unambiguous win is **S3 storage +
-transfer bytes** (and, against real cross-AZ/region S3 where bytes dominate
-latency, faster cold pulls). zstd would give a better ratio at lower CPU if
-that tradeoff ever bites — noted in the tracker.
+**Tradeoff.** With realistic data the store holds **~3.5× fewer bytes** (see
+the sweep above) — a direct S3 storage + transfer saving on every cold db.
+The cost is decompression CPU + writing the full logical size on restore,
+which on a fast (loopback) network makes cold pulls *slower* (1 GiB: 1.73s
+uncompressed → 8.22s), since the bytes saved were nearly free to move.
+Against real cross-AZ/region S3, moving 271 MB instead of 954 MB should
+offset or beat that CPU. If the latency ever dominates, zstd (better ratio,
+faster inflate) or skipping compression when it doesn't pay are options —
+noted in the tracker (task #33).
 
 ## Environment caveats
 
