@@ -15,6 +15,8 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
          |> assign(:page_title, "Databases")
          |> assign(:new_database_form, to_form(%{"name" => ""}))
          |> assign(:new_token_form, to_form(%{"name" => ""}))
+         |> assign(:branch_form, to_form(%{"name" => ""}))
+         |> assign(:branching_database_id, nil)
          |> assign(:revealed_database_id, nil)
          |> assign(:tokens, [])
          |> assign(:revealed_secrets, %{})
@@ -46,6 +48,40 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
 
   def handle_event("load_more", _params, socket) do
     {:noreply, load_databases(socket, socket.assigns.next)}
+  end
+
+  def handle_event("toggle_branch", %{"id" => id}, socket) do
+    next = if socket.assigns.branching_database_id == id, do: nil, else: id
+
+    {:noreply,
+     socket
+     |> assign(:branching_database_id, next)
+     |> assign(:branch_form, to_form(%{"name" => ""}))}
+  end
+
+  def handle_event("branch", %{"name" => name}, socket) do
+    with database when not is_nil(database) <-
+           ControlPlane.get_database(socket.assigns.tenant, socket.assigns.branching_database_id),
+         {:ok, branch} <- Smolsqls.branch_database(database, %{"name" => name}) do
+      {:noreply,
+       socket
+       |> put_flash(:info, "Branch #{branch.name} created")
+       |> assign(:branching_database_id, nil)
+       |> load_databases()}
+    else
+      {:error, :no_snapshot} ->
+        {:noreply,
+         put_flash(socket, :error, "No snapshot yet — back up this database first, then branch")}
+
+      {:error, :database_limit_reached} ->
+        {:noreply, put_flash(socket, :error, "Database limit reached")}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, put_flash(socket, :error, "Invalid name: #{inspect(changeset.errors[:name])}")}
+
+      _ ->
+        {:noreply, put_flash(socket, :error, "Branch failed")}
+    end
   end
 
   def handle_event("delete", %{"id" => id}, socket) do
@@ -200,7 +236,28 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
 
     socket
     |> assign(:databases, databases)
+    |> assign(:branch_counts, ControlPlane.branch_counts(socket.assigns.tenant))
     |> assign(:next, page.next)
+  end
+
+  defp ordered_databases(databases) do
+    ids = MapSet.new(databases, & &1.id)
+
+    children =
+      databases
+      |> Enum.filter(fn d ->
+        d.source_database_id && MapSet.member?(ids, d.source_database_id)
+      end)
+      |> Enum.group_by(& &1.source_database_id)
+
+    roots =
+      Enum.filter(databases, fn d ->
+        is_nil(d.source_database_id) or not MapSet.member?(ids, d.source_database_id)
+      end)
+
+    Enum.flat_map(roots, fn root ->
+      [%{db: root, depth: 0} | Enum.map(Map.get(children, root.id, []), &%{db: &1, depth: 1})]
+    end)
   end
 
   defp authenticate(session) do
@@ -310,7 +367,13 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
         </div>
 
         <div class="space-y-3">
-          <div :for={database <- @databases} class="card border border-base-300 bg-base-200">
+          <div
+            :for={%{db: database, depth: depth} <- ordered_databases(@databases)}
+            class={[
+              "card border border-base-300 bg-base-200",
+              depth == 1 && "ml-6 sm:ml-10 border-l-4 border-l-primary/30"
+            ]}
+          >
             <div class="card-body space-y-2">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
@@ -322,6 +385,19 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
                     database.status == :deleting && "badge-error"
                   ]}>
                     {database.status}
+                  </span>
+                  <span
+                    :if={(@branch_counts[database.id] || 0) > 0}
+                    class="badge badge-sm badge-soft badge-info"
+                    title="branches"
+                  >
+                    ⑃ {@branch_counts[database.id]}
+                  </span>
+                  <span :if={database.source_database_id} class="badge badge-sm badge-ghost">
+                    branch
+                  </span>
+                  <span :if={database.expires_at} class="text-xs text-base-content/50">
+                    expires {Calendar.strftime(database.expires_at, "%Y-%m-%d %H:%M UTC")}
                   </span>
                   <span :if={database.node} class="text-xs text-base-content/50 font-mono">
                     {database.node}
@@ -339,6 +415,13 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
                     Backup
                   </button>
                   <button
+                    class="btn btn-ghost btn-sm"
+                    phx-click="toggle_branch"
+                    phx-value-id={database.id}
+                  >
+                    Branch
+                  </button>
+                  <button
                     class="btn btn-ghost btn-sm text-error"
                     phx-click="delete"
                     phx-value-id={database.id}
@@ -347,6 +430,30 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
                     Delete
                   </button>
                 </div>
+              </div>
+              <div
+                :if={@branching_database_id == database.id}
+                class="rounded-md border border-base-300 bg-base-100 p-3 space-y-2"
+              >
+                <.form
+                  for={@branch_form}
+                  phx-submit="branch"
+                  class="flex gap-2"
+                  id={"branch-#{database.id}"}
+                >
+                  <input
+                    type="text"
+                    name="name"
+                    value={@branch_form[:name].value}
+                    placeholder="branch name (lowercase, dashes, underscores)"
+                    class="input input-bordered input-sm flex-1 font-mono text-xs"
+                    required
+                  />
+                  <button class="btn btn-sm btn-primary">Create branch</button>
+                </.form>
+                <p class="text-xs text-base-content/50">
+                  Seeded from the latest snapshot — an independent copy.
+                </p>
               </div>
               <div :if={@revealed_database_id == database.id} class="space-y-3 text-sm">
                 <div>
