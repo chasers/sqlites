@@ -34,24 +34,65 @@ defmodule SmolsqlsWeb.Hrana.Stmt do
     end
   end
 
+  @doc """
+  Runs a Hrana batch: each step executes only when its `condition`
+  holds against the outcomes of prior steps (`ok`/`error`/`and`/`or`/
+  `not`/`is_autocommit`, per the Hrana spec). Steps whose condition is
+  false are skipped — neither a result nor an error — which is how
+  libSQL clients wrap statements in `BEGIN`/`COMMIT`/`ROLLBACK` for
+  atomic reads and writes. A missing condition always runs.
+  """
   @spec batch(map(), map(), ctx()) :: map()
   def batch(%{"steps" => steps}, sqls, ctx) do
-    step_results =
-      Enum.map(steps, fn %{"stmt" => stmt} -> execute(stmt, sqls, ctx) end)
+    outcomes =
+      steps
+      |> Enum.reduce([], fn step, prior ->
+        outcome =
+          if condition_met?(Map.get(step, "condition"), Enum.reverse(prior), ctx) do
+            execute(step["stmt"], sqls, ctx)
+          else
+            :skipped
+          end
+
+        [outcome | prior]
+      end)
+      |> Enum.reverse()
 
     %{
       step_results:
-        Enum.map(step_results, fn
+        Enum.map(outcomes, fn
           {:ok, result} -> result
-          {:error, _} -> nil
+          _ -> nil
         end),
       step_errors:
-        Enum.map(step_results, fn
-          {:ok, _} -> nil
+        Enum.map(outcomes, fn
           {:error, message} -> %{message: message}
+          _ -> nil
         end)
     }
   end
+
+  defp condition_met?(nil, _prior, _ctx), do: true
+
+  defp condition_met?(%{"type" => "ok", "step" => step}, prior, _ctx),
+    do: match?({:ok, _}, Enum.at(prior, step))
+
+  defp condition_met?(%{"type" => "error", "step" => step}, prior, _ctx),
+    do: match?({:error, _}, Enum.at(prior, step))
+
+  defp condition_met?(%{"type" => "not", "cond" => cond}, prior, ctx),
+    do: not condition_met?(cond, prior, ctx)
+
+  defp condition_met?(%{"type" => "and", "conds" => conds}, prior, ctx),
+    do: Enum.all?(conds, &condition_met?(&1, prior, ctx))
+
+  defp condition_met?(%{"type" => "or", "conds" => conds}, prior, ctx),
+    do: Enum.any?(conds, &condition_met?(&1, prior, ctx))
+
+  defp condition_met?(%{"type" => "is_autocommit"}, _prior, ctx),
+    do: DataPlane.autocommit?(ctx.database.id, ctx.owner)
+
+  defp condition_met?(_unknown, _prior, _ctx), do: true
 
   @spec describe(map(), map(), ctx()) :: {:ok, map()} | {:error, String.t()}
   def describe(request, sqls, ctx) do

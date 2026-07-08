@@ -48,6 +48,14 @@ defmodule SmolsqlsWeb.Router do
   scope "/v2", SmolsqlsWeb.Hrana do
     pipe_through :api
 
+    get "/", VersionController, :check
+    post "/pipeline", PipelineController, :create
+  end
+
+  scope "/v3", SmolsqlsWeb.Hrana do
+    pipe_through :api
+
+    get "/", VersionController, :check
     post "/pipeline", PipelineController, :create
   end
 
