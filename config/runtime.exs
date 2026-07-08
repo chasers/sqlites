@@ -92,14 +92,10 @@ if config_env() == :prod do
     secret_access_key: System.get_env("S3_SECRET_ACCESS_KEY"),
     endpoint: System.get_env("S3_ENDPOINT")
 
-  # LITESTREAM_RETENTION (e.g. "720h" for the 30-day point-in-time branch window)
-  # is passed to `register` only when set; leave unset until the register
-  # subcommand is confirmed to accept -retention.
   config :smolsqls, Smolsqls.DataPlane.Litestream,
     enabled: System.get_env("LITESTREAM_ENABLED") in ~w(true 1),
     socket: System.get_env("LITESTREAM_SOCKET") || "/var/run/litestream/litestream.sock",
-    replica_url_prefix: System.get_env("LITESTREAM_REPLICA_URL_PREFIX"),
-    retention: System.get_env("LITESTREAM_RETENTION")
+    replica_url_prefix: System.get_env("LITESTREAM_REPLICA_URL_PREFIX")
 
   config :smolsqls, Smolsqls.DataPlane.CacheEvictor,
     enabled: System.get_env("CACHE_EVICTION_ENABLED") in ~w(true 1),
