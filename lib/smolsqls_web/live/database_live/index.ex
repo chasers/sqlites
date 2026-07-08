@@ -205,10 +205,10 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
     end
   end
 
-  defp connection_string(database, secret) do
+  defp connection_string(token) do
     host = SmolsqlsWeb.Endpoint.host()
     port = SmolsqlsWeb.Endpoint.url() |> URI.parse() |> Map.get(:port)
-    "libsql://#{host}:#{port}/#{database.id}?authToken=#{secret}"
+    "libsql://#{host}:#{port}?authToken=#{token}"
   end
 
   defp query_url(database) do
@@ -414,10 +414,11 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
                     <button class="btn btn-sm">New token</button>
                   </.form>
                 </div>
-                <div :if={secret = first_revealed_secret(@tokens, @revealed_secrets)}>
+                <% token = first_revealed_secret(@tokens, @revealed_secrets) || "<your-token>" %>
+                <div>
                   <div class="text-xs text-base-content/60 mb-1">libSQL connection string</div>
                   <code class="block rounded-md border border-base-300 bg-base-100 p-2 font-mono text-xs break-all">
-                    {connection_string(database, secret)}
+                    {connection_string(token)}
                   </code>
                 </div>
                 <div>
@@ -428,7 +429,6 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
                     {query_url(database)}
                   </code>
                 </div>
-                <% token = first_revealed_secret(@tokens, @revealed_secrets) || "<your-token>" %>
                 <div>
                   <div class="text-xs text-base-content/60 mb-1">Quickstart — curl</div>
                   <pre class="overflow-x-auto rounded-md border border-base-300 bg-base-100 p-3 font-mono text-xs leading-relaxed"><code>{curl_examples(database, token)}</code></pre>

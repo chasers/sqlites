@@ -38,7 +38,7 @@ defmodule SmolsqlsWeb.Api.DatabaseJSON do
     port = SmolsqlsWeb.Endpoint.url() |> URI.parse() |> Map.get(:port)
 
     %{
-      libsql: "libsql://#{host}:#{port}/#{database.id}?authToken=#{database.auth_token}",
+      libsql: "libsql://#{host}:#{port}?authToken=#{database.auth_token}",
       http: %{
         url: SmolsqlsWeb.Endpoint.url() <> "/v1/databases/#{database.id}/query",
         method: "POST",
