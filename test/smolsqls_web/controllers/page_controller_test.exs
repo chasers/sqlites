@@ -11,6 +11,9 @@ defmodule SmolsqlsWeb.PageControllerTest do
     assert response =~ "1 GiB"
     assert response =~ "Backups"
     assert response =~ "daily"
+    assert response =~ "Database branching"
+    assert response =~ "Point-in-time recovery"
+    assert response =~ "30 days (litestream)"
   end
 
   test "serves a CSP whose script nonce matches the inline bootstrap script", %{conn: conn} do
