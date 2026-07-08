@@ -59,10 +59,16 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
      |> assign(:branch_form, to_form(%{"name" => ""}))}
   end
 
-  def handle_event("branch", %{"name" => name}, socket) do
+  def handle_event("branch", %{"name" => name} = params, socket) do
+    attrs =
+      case params["timestamp"] do
+        ts when is_binary(ts) and ts != "" -> %{"name" => name, "timestamp" => ts}
+        _ -> %{"name" => name}
+      end
+
     with database when not is_nil(database) <-
            ControlPlane.get_database(socket.assigns.tenant, socket.assigns.branching_database_id),
-         {:ok, branch} <- Smolsqls.branch_database(database, %{"name" => name}) do
+         {:ok, branch} <- Smolsqls.branch_database(database, attrs) do
       {:noreply,
        socket
        |> put_flash(:info, "Branch #{branch.name} created")
@@ -72,6 +78,14 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
       {:error, :no_snapshot} ->
         {:noreply,
          put_flash(socket, :error, "No snapshot yet — back up this database first, then branch")}
+
+      {:error, :point_in_time_requires_litestream} ->
+        {:noreply,
+         put_flash(socket, :error, "Point-in-time branching needs continuous replication enabled")}
+
+      {:error, reason} when reason in [:invalid_timestamp, :timestamp_out_of_window] ->
+        {:noreply,
+         put_flash(socket, :error, "Point in time must be RFC3339 and within the last 30 days")}
 
       {:error, :database_limit_reached} ->
         {:noreply, put_flash(socket, :error, "Database limit reached")}
@@ -449,10 +463,20 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
                     class="input input-bordered input-sm flex-1 font-mono text-xs"
                     required
                   />
+                  <input
+                    :if={database.litestream_enabled}
+                    type="text"
+                    name="timestamp"
+                    placeholder="point in time (RFC3339, optional)"
+                    class="input input-bordered input-sm flex-1 font-mono text-xs"
+                  />
                   <button class="btn btn-sm btn-primary">Create branch</button>
                 </.form>
                 <p class="text-xs text-base-content/50">
-                  Seeded from the latest snapshot — an independent copy.
+                  {if database.litestream_enabled,
+                    do:
+                      "Seeded from the latest snapshot, or an exact point in time — an independent copy.",
+                    else: "Seeded from the latest snapshot — an independent copy."}
                 </p>
               </div>
               <div :if={@revealed_database_id == database.id} class="space-y-3 text-sm">

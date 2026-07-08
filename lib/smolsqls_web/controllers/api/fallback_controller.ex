@@ -76,6 +76,38 @@ defmodule SmolsqlsWeb.Api.FallbackController do
     })
   end
 
+  def call(conn, {:error, :point_in_time_requires_litestream}) do
+    conn
+    |> put_status(:conflict)
+    |> json(%{
+      error: %{
+        code: "point_in_time_requires_litestream",
+        message:
+          "point-in-time branching requires litestream (continuous replication) on the source"
+      }
+    })
+  end
+
+  def call(conn, {:error, :invalid_timestamp}) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{
+      error: %{code: "invalid_timestamp", message: "\"timestamp\" must be an RFC3339 datetime"}
+    })
+  end
+
+  def call(conn, {:error, :timestamp_out_of_window}) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> json(%{
+      error: %{
+        code: "timestamp_out_of_window",
+        message:
+          "\"timestamp\" is outside the recoverable window (last 30 days, not in the future)"
+      }
+    })
+  end
+
   def call(conn, {:error, :no_snapshot}) do
     conn
     |> put_status(:conflict)

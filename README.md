@@ -199,6 +199,13 @@ curl -X POST http://localhost:4000/v1/databases/$DB_ID/branch \
   -H "authorization: Bearer $API_KEY" \
   -H 'content-type: application/json' \
   -d '{"name": "task-db-branch"}'
+
+# branch to an exact point in time (litestream-enabled sources only; within the
+# last 30 days) by adding a "timestamp" (RFC3339)
+curl -X POST http://localhost:4000/v1/databases/$DB_ID/branch \
+  -H "authorization: Bearer $API_KEY" \
+  -H 'content-type: application/json' \
+  -d '{"name": "task-db-pit", "timestamp": "2026-07-07T12:00:00Z"}'
 ```
 
 Or with a stock libSQL client:

@@ -283,6 +283,22 @@ defmodule SmolsqlsWeb.Api.ApiFlowTest do
 
       assert body["error"]["code"] == "no_snapshot"
     end
+
+    test "point-in-time branch requires litestream on the source", %{conn: conn} do
+      tenant = tenant_fixture()
+      database = placed_database_fixture(tenant)
+
+      body =
+        conn
+        |> authed(tenant.api_key)
+        |> post(~p"/v1/databases/#{database.id}/branch", %{
+          "name" => "branch-db",
+          "timestamp" => "2026-07-01T00:00:00Z"
+        })
+        |> json_response(409)
+
+      assert body["error"]["code"] == "point_in_time_requires_litestream"
+    end
   end
 
   describe "token management over the API" do

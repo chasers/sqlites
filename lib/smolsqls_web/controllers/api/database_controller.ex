@@ -44,7 +44,7 @@ defmodule SmolsqlsWeb.Api.DatabaseController do
   end
 
   def branch(conn, %{"database_id" => id} = params) do
-    attrs = Map.take(params, ["name", "expires_at"])
+    attrs = Map.take(params, ["name", "expires_at", "timestamp"])
 
     with {:ok, source} <- fetch_database(conn, id),
          {:ok, database} <- Smolsqls.branch_database(source, attrs) do
