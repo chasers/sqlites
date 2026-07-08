@@ -10,4 +10,11 @@ data:
     socket:
       enabled: true
       path: /var/run/litestream/litestream.sock
+    # Snapshot retention for the point-in-time branch window (30 days).
+    # Retention lives in config (v0.5's `register` has no retention flag);
+    # `snapshot.retention` is the recognized key. The daemon enforces it on
+    # `litestream replicate -once -enforce-retention` (run periodically),
+    # so WAL/snapshots older than this are reclaimed.
+    snapshot:
+      retention: 720h
     dbs: []

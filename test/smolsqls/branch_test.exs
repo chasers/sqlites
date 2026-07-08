@@ -131,6 +131,39 @@ defmodule Smolsqls.BranchTest do
              Smolsqls.branch_database(source, %{"name" => "b2", "timestamp" => stale})
   end
 
+  test "branch_database/2 cleans up a partial branch when seeding fails" do
+    tenant = tenant_fixture()
+    source = placed_database_fixture(tenant)
+
+    {:ok, source} =
+      source |> Ecto.Changeset.change(snapshot_generation: 3) |> Smolsqls.Repo.update()
+
+    name = "branch-#{System.unique_integer([:positive])}"
+
+    assert {:error, _reason} = Smolsqls.branch_database(source, %{"name" => name})
+
+    refute Enum.any?(ControlPlane.list_databases(tenant), &(&1.name == name))
+  end
+
+  test "a branch name is reusable after the branch is deleted" do
+    tenant = tenant_fixture()
+    source = placed_database_fixture(tenant)
+    {:ok, _} = DataPlane.query(source.id, "CREATE TABLE t (v TEXT)")
+    :ok = DataPlane.idle_stop_database(source)
+    source = ControlPlane.get_database(source.id)
+
+    name = "reused-#{System.unique_integer([:positive])}"
+
+    {:ok, first} = Smolsqls.branch_database(source, %{"name" => name})
+    assert {:ok, _} = Smolsqls.remove_database(first)
+
+    {:ok, second} = Smolsqls.branch_database(source, %{"name" => name})
+    cleanup_on_exit(second)
+
+    assert second.name == name
+    assert second.id != first.id
+  end
+
   @tag :tmp_dir
   test "seed_branch_from_pitr uploads a point-in-time restore to the branch's snapshot key",
        %{tmp_dir: tmp_dir} do
