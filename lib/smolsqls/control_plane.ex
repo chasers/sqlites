@@ -233,6 +233,20 @@ defmodule Smolsqls.ControlPlane do
   end
 
   @doc """
+  Branch counts for a tenant's databases as a `%{source_database_id => count}`
+  map — one query for the whole list, powering the dashboard's branch badge.
+  """
+  @spec branch_counts(Tenant.t()) :: %{optional(String.t()) => non_neg_integer()}
+  def branch_counts(%Tenant{id: tenant_id}) do
+    Database
+    |> where([d], d.tenant_id == ^tenant_id and not is_nil(d.source_database_id))
+    |> group_by([d], d.source_database_id)
+    |> select([d], {d.source_database_id, count(d.id)})
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  @doc """
   Ephemeral databases whose `expires_at` has passed — the expiry sweep's
   work list, soonest-expired first. `:limit` bounds the batch.
   """
