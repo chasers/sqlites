@@ -79,8 +79,15 @@ job.
   writer lease owned by the connection, bounded by the
   `txn_timeout_ms` limit and auto-rolled-back on disconnect; other
   connections fail fast with a busy error until it ends.
-- **Hrana over HTTP**: `POST /v2/pipeline` (stateless, batons
-  unsupported) for `http://` libsql URLs and edge runtimes.
+- **Hrana over HTTP**: `POST /v2/pipeline` and `POST /v3/pipeline`
+  (with `GET /v2` / `GET /v3` version probes) for `http://` / `https://`
+  libsql URLs, edge runtimes, and browser clients. Transactions work
+  within a single pipeline request — `BEGIN`/`COMMIT`/`ROLLBACK` and the
+  conditional batches libSQL clients emit run against one connection and
+  any transaction left open is rolled back at request end — but do not
+  persist across requests (batons unsupported). CORS is open (`*`) on
+  the token-authenticated API (bearer auth, no cookies), so browser
+  clients such as LibSQL Studio connect directly.
 - **Plain HTTP**: `POST /v1/databases/:id/query` with
   `{"sql": "...", "args": [...]}` and the database auth token as a
   Bearer token.
