@@ -19,24 +19,49 @@ defmodule Smolsqls do
     end
   end
 
+  @pitr_window_days 30
+
   @doc """
-  Branches `source` into a new independent database seeded from a snapshot.
+  Branches `source` into a new independent database, seeded either:
 
-  Copies the source's latest shipped artifact (its idle snapshot, else its
-  newest backup) into the child's idle-snapshot key, creates the child row
-  with lineage, and places it — restoring the seeded bytes. Zero impact on
-  the source's writer. Returns `{:error, :no_snapshot}` when the source has
-  never shipped a snapshot and has no backup to branch from.
+    * **from a snapshot** (default) — the source's latest shipped artifact
+      (idle snapshot, else newest backup), server-side copied; or
+    * **from a point in time** — when `attrs["timestamp"]` is given, the
+      source's litestream replica restored to that instant. Requires the
+      source to have litestream enabled and the timestamp within the
+      recoverable window (last #{@pitr_window_days} days).
 
-  On a failure after the child row is created, the partial branch is cleaned
-  up best-effort (robust, idempotent cleanup is a separate concern).
+  Zero impact on the source's writer either way. Creates the child row with
+  lineage and places it, restoring the seeded bytes. On a failure after the
+  child row is created, the partial branch is cleaned up best-effort.
+
+  Errors: `:no_snapshot`, `:point_in_time_requires_litestream`,
+  `:invalid_timestamp`, `:timestamp_out_of_window`.
   """
   @spec branch_database(Database.t(), map()) :: {:ok, Database.t()} | {:error, term()}
   def branch_database(%Database{} = source, attrs) do
-    with {:ok, source_key} <- source_snapshot_key(source),
+    {timestamp, attrs} = Map.pop(attrs, "timestamp")
+
+    with {:ok, seed} <- resolve_seed(source, timestamp),
+         attrs = stamp_branch_point(attrs, seed),
          {:ok, child} <- ControlPlane.branch_database(source, attrs),
-         {:ok, placed} <- seed_and_place(child, source_key) do
+         {:ok, placed} <- seed_and_place(source, child, seed) do
       {:ok, %{placed | auth_token: child.auth_token}}
+    end
+  end
+
+  defp resolve_seed(%Database{} = source, nil) do
+    with {:ok, key} <- source_snapshot_key(source), do: {:ok, {:snapshot, key}}
+  end
+
+  defp resolve_seed(%Database{litestream_enabled: false}, _timestamp) do
+    {:error, :point_in_time_requires_litestream}
+  end
+
+  defp resolve_seed(%Database{}, timestamp) do
+    with {:ok, at} <- parse_timestamp(timestamp),
+         :ok <- check_window(at) do
+      {:ok, {:pitr, at}}
     end
   end
 
@@ -51,8 +76,33 @@ defmodule Smolsqls do
     end
   end
 
-  defp seed_and_place(%Database{} = child, source_key) do
-    with :ok <- DataPlane.seed_branch_from_object(child, source_key),
+  defp parse_timestamp(%DateTime{} = at), do: {:ok, at}
+
+  defp parse_timestamp(str) when is_binary(str) do
+    case DateTime.from_iso8601(str) do
+      {:ok, at, _offset} -> {:ok, at}
+      _ -> {:error, :invalid_timestamp}
+    end
+  end
+
+  defp parse_timestamp(_), do: {:error, :invalid_timestamp}
+
+  defp check_window(%DateTime{} = at) do
+    now = DateTime.utc_now()
+    earliest = DateTime.add(now, -@pitr_window_days * 24 * 3600, :second)
+
+    if DateTime.compare(at, earliest) != :lt and DateTime.compare(at, now) != :gt do
+      :ok
+    else
+      {:error, :timestamp_out_of_window}
+    end
+  end
+
+  defp stamp_branch_point(attrs, {:pitr, at}), do: Map.put(attrs, "branch_point_at", at)
+  defp stamp_branch_point(attrs, {:snapshot, _key}), do: attrs
+
+  defp seed_and_place(%Database{} = source, %Database{} = child, seed) do
+    with :ok <- do_seed(source, child, seed),
          {:ok, placed} <- DataPlane.place_branch(child) do
       {:ok, placed}
     else
@@ -60,6 +110,14 @@ defmodule Smolsqls do
         _ = DataPlane.remove_database(child)
         error
     end
+  end
+
+  defp do_seed(_source, %Database{} = child, {:snapshot, source_key}) do
+    DataPlane.seed_branch_from_object(child, source_key)
+  end
+
+  defp do_seed(%Database{} = source, %Database{} = child, {:pitr, at}) do
+    DataPlane.seed_branch_from_pitr(source, child, at)
   end
 
   @doc """

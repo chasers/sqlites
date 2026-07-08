@@ -4,7 +4,37 @@ defmodule Smolsqls.BranchTest do
   import Smolsqls.Fixtures
 
   alias Smolsqls.ControlPlane
+  alias Smolsqls.ControlPlane.Database
   alias Smolsqls.DataPlane
+  alias Smolsqls.DataPlane.{IdleSnapshots, Litestream}
+
+  defp with_litestream_stub(tmp_dir, bytes, fun) do
+    stub = Path.join(tmp_dir, "litestream-stub")
+
+    File.write!(stub, """
+    #!/bin/sh
+    if [ "$1" = "restore" ]; then printf '%s' '#{bytes}' > "$3"; exit 0; fi
+    exit 1
+    """)
+
+    File.chmod!(stub, 0o755)
+    previous = Application.get_env(:smolsqls, Litestream)
+
+    Application.put_env(:smolsqls, Litestream,
+      enabled: true,
+      replica_url_prefix: "s3://bucket/ls",
+      binary: stub
+    )
+
+    try do
+      fun.()
+    after
+      case previous do
+        nil -> Application.delete_env(:smolsqls, Litestream)
+        value -> Application.put_env(:smolsqls, Litestream, value)
+      end
+    end
+  end
 
   defp cleanup_on_exit(database) do
     on_exit(fn ->
@@ -75,5 +105,51 @@ defmodule Smolsqls.BranchTest do
              Smolsqls.branch_database(source, %{
                "name" => "branch-#{System.unique_integer([:positive])}"
              })
+  end
+
+  test "branch_database/2 rejects a point in time when the source has no litestream" do
+    tenant = tenant_fixture()
+    source = placed_database_fixture(tenant)
+
+    assert {:error, :point_in_time_requires_litestream} =
+             Smolsqls.branch_database(source, %{
+               "name" => "branch-#{System.unique_integer([:positive])}",
+               "timestamp" => "2026-07-01T00:00:00Z"
+             })
+  end
+
+  test "branch_database/2 rejects an invalid or out-of-window point in time" do
+    tenant = tenant_fixture()
+    source = placed_database_fixture(tenant, %{"litestream_enabled" => true})
+
+    assert {:error, :invalid_timestamp} =
+             Smolsqls.branch_database(source, %{"name" => "b1", "timestamp" => "nonsense"})
+
+    stale = DateTime.utc_now() |> DateTime.add(-40 * 24 * 3600, :second) |> DateTime.to_iso8601()
+
+    assert {:error, :timestamp_out_of_window} =
+             Smolsqls.branch_database(source, %{"name" => "b2", "timestamp" => stale})
+  end
+
+  @tag :tmp_dir
+  test "seed_branch_from_pitr uploads a point-in-time restore to the branch's snapshot key",
+       %{tmp_dir: tmp_dir} do
+    tenant = tenant_fixture()
+    source = placed_database_fixture(tenant, %{"litestream_enabled" => true})
+
+    branch = %Database{
+      id: Ecto.UUID.generate(),
+      tenant_id: tenant.id,
+      name: "b",
+      status: :pending
+    }
+
+    with_litestream_stub(tmp_dir, "branch-bytes", fn ->
+      assert :ok = DataPlane.seed_branch_from_pitr(source, branch, ~U[2026-07-01 00:00:00Z])
+    end)
+
+    dest = Path.join(tmp_dir, "verify.db")
+    assert :ok = Smolsqls.ObjectStore.fetch_to_file(IdleSnapshots.object_key(branch), dest)
+    assert File.read!(dest) == "branch-bytes"
   end
 end

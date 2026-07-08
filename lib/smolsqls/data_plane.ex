@@ -61,6 +61,30 @@ defmodule Smolsqls.DataPlane do
   end
 
   @doc """
+  Seeds a branch from a point in time: restores the source's litestream
+  replica to `timestamp` into a temp file, then uploads it to the branch's
+  idle-snapshot key, from which `place_branch/1` restores it. Reads from the
+  object store only — no impact on the source's writer.
+  """
+  @spec seed_branch_from_pitr(Database.t(), Database.t(), DateTime.t()) :: :ok | {:error, term()}
+  def seed_branch_from_pitr(%Database{} = source, %Database{} = branch, %DateTime{} = timestamp) do
+    tmp =
+      Path.join(
+        System.tmp_dir!(),
+        "smolsqls-branch-#{branch.id}-#{System.unique_integer([:positive])}.db"
+      )
+
+    try do
+      with :ok <- Litestream.restore(source, tmp, timestamp: timestamp),
+           {:ok, _size} <- Smolsqls.ObjectStore.put_file(IdleSnapshots.object_key(branch), tmp) do
+        :ok
+      end
+    after
+      File.rm(tmp)
+    end
+  end
+
+  @doc """
   Places a branch whose bytes already sit at its idle-snapshot key: picks a
   node, restores the seeded artifact into the child's file (the activation
   restore path), starts its server, and marks it placed. Like
