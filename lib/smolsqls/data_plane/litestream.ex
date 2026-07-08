@@ -25,16 +25,19 @@ defmodule Smolsqls.DataPlane.Litestream do
   @spec register(Database.t()) :: :ok | {:error, term()}
   def register(%Database{} = database) do
     if enabled?() do
-      run([
-        "register",
-        "-socket",
-        socket(),
-        "-replica",
-        replica_url(database),
-        database.file_path
-      ])
+      run(
+        ["register", "-socket", socket(), "-replica", replica_url(database)] ++
+          retention_args() ++ [database.file_path]
+      )
     else
       :ok
+    end
+  end
+
+  defp retention_args do
+    case config()[:retention] do
+      value when value in [nil, ""] -> []
+      value -> ["-retention", to_string(value)]
     end
   end
 

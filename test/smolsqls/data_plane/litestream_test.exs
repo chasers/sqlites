@@ -95,6 +95,37 @@ defmodule Smolsqls.DataPlane.LitestreamTest do
     )
   end
 
+  test "register passes -retention only when configured", %{tmp_dir: tmp_dir} do
+    args_file = Path.join(tmp_dir, "args")
+    stub = Path.join(tmp_dir, "litestream-stub")
+
+    File.write!(stub, """
+    #!/bin/sh
+    printf '%s\\n' "$@" > #{args_file}
+    exit 0
+    """)
+
+    File.chmod!(stub, 0o755)
+
+    read_args = fn -> File.read!(args_file) |> String.split("\n", trim: true) end
+    db = database(%{file_path: Path.join(tmp_dir, "db.db")})
+
+    with_config(
+      [enabled: true, replica_url_prefix: "s3://b/ls", binary: stub, retention: "720h"],
+      fn ->
+        assert :ok = Litestream.register(db)
+        args = read_args.()
+        assert "-retention" in args
+        assert "720h" in args
+      end
+    )
+
+    with_config([enabled: true, replica_url_prefix: "s3://b/ls", binary: stub], fn ->
+      assert :ok = Litestream.register(db)
+      refute "-retention" in read_args.()
+    end)
+  end
+
   defp with_config(config, fun) do
     previous = Application.get_env(:smolsqls, Litestream)
     Application.put_env(:smolsqls, Litestream, config)

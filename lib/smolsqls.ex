@@ -5,6 +5,8 @@ defmodule Smolsqls do
   these instead of sequencing the planes themselves.
   """
 
+  require Logger
+
   alias Smolsqls.ControlPlane
   alias Smolsqls.ControlPlane.{Database, Tenant}
   alias Smolsqls.DataPlane
@@ -107,8 +109,19 @@ defmodule Smolsqls do
       {:ok, placed}
     else
       error ->
-        _ = DataPlane.remove_database(child)
+        cleanup_failed_branch(child)
         error
+    end
+  end
+
+  defp cleanup_failed_branch(%Database{} = child) do
+    case DataPlane.remove_database(child) do
+      {:ok, _} ->
+        :ok
+
+      other ->
+        Logger.warning("branch cleanup for #{child.id} did not fully complete: #{inspect(other)}")
+        :ok
     end
   end
 
