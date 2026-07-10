@@ -8,7 +8,11 @@ defmodule Smolsqls.ControlPlane.Database do
   @foreign_key_type :binary_id
   schema "databases" do
     field :name, :string
-    field :status, Ecto.Enum, values: [:pending, :active, :deleting, :error], default: :pending
+
+    field :status, Ecto.Enum,
+      values: [:pending, :active, :moving, :deleting, :error],
+      default: :pending
+
     field :node, :string
     field :region, :string
     field :cloud, :string
@@ -76,19 +80,40 @@ defmodule Smolsqls.ControlPlane.Database do
     cast(database, attrs, [:litestream_enabled])
   end
 
+  @doc """
+  Records a relocation: the database's new region (with `cloud` re-derived)
+  and the target node it now lives on. Region validity is enforced here so an
+  unsupported region is rejected before the file moves.
+  """
+  def move_changeset(database, attrs) do
+    database
+    |> cast(attrs, [:region, :node])
+    |> put_change(:status, :active)
+    |> validate_required([:region, :node])
+    |> validate_region()
+    |> put_cloud()
+  end
+
   defp put_default_region(changeset) do
-    changeset =
-      case get_field(changeset, :region) do
-        nil ->
-          case Smolsqls.Regions.default() do
-            nil -> changeset
-            default -> put_change(changeset, :region, default)
-          end
+    changeset
+    |> put_default_region_slug()
+    |> put_cloud()
+  end
 
-        _region ->
-          changeset
-      end
+  defp put_default_region_slug(changeset) do
+    case get_field(changeset, :region) do
+      nil ->
+        case Smolsqls.Regions.default() do
+          nil -> changeset
+          default -> put_change(changeset, :region, default)
+        end
 
+      _region ->
+        changeset
+    end
+  end
+
+  defp put_cloud(changeset) do
     put_change(changeset, :cloud, Smolsqls.Regions.cloud(get_field(changeset, :region)))
   end
 

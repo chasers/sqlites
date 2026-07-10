@@ -141,6 +141,52 @@ defmodule Smolsqls.DataPlane do
     end
   end
 
+  @doc """
+  Picks a live node in `region` to receive a relocating database, or
+  `{:error, :no_capacity_in_region}` when none is available.
+  """
+  @spec pick_region_node(String.t()) :: {:ok, node()} | {:error, :no_capacity_in_region}
+  def pick_region_node(region) do
+    case Placement.pick_node(region) do
+      {:error, reason} -> {:error, reason}
+      node -> {:ok, node}
+    end
+  end
+
+  @doc """
+  Establishes an object-store snapshot for a database that has never
+  shipped so a move has bytes to restore on the target. Runs while the
+  database is still `:active` (waking it requires an active placement) and
+  only when it is cold and never-shipped; a hot writer is shipped later by
+  `stop_hot_for_move/1` after the relocation fence is in place. No-op
+  otherwise.
+  """
+  @spec ensure_snapshot_for_move(Database.t()) :: :ok | {:error, term()}
+  def ensure_snapshot_for_move(%Database{status: :active, snapshot_generation: gen} = database)
+      when gen in [nil, 0] do
+    if database_hot?(database.id) do
+      :ok
+    else
+      with {:ok, _pid} <- activate_database(database), do: idle_stop_database(database)
+    end
+  end
+
+  def ensure_snapshot_for_move(%Database{}), do: :ok
+
+  @doc """
+  Idle-stops a database's live writer (shipping its final state) if one is
+  running — called after the database is marked `:moving`, so no converged
+  node revives it in the old region before its placement row flips.
+  """
+  @spec stop_hot_for_move(Database.t()) :: :ok | {:error, term()}
+  def stop_hot_for_move(%Database{} = database) do
+    if database_hot?(database.id) do
+      idle_stop_database(database)
+    else
+      :ok
+    end
+  end
+
   @spec remove_database(Database.t()) :: {:ok, Database.t()} | {:error, term()}
   def remove_database(%Database{} = database) do
     on_owner_node(database, :remove_database_locally, [database])
@@ -182,6 +228,8 @@ defmodule Smolsqls.DataPlane do
       when is_binary(file_path) do
     on_owner_node(database, :activate_database_locally, [database])
   end
+
+  def activate_database(%Database{status: :moving}), do: {:error, :database_relocating}
 
   def activate_database(%Database{}), do: {:error, :database_not_active}
 

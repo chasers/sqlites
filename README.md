@@ -97,7 +97,19 @@ publishes its own region to a `nodes` table on boot (`REGION`) — and rejects a
 create with `no_capacity_in_region` rather than silently placing it elsewhere.
 Branches inherit their source's region. The region system is dormant when
 `REGIONS` is empty (dev, single-cluster): databases carry no region and
-placement stays purely load-based. Connection strings return a **global** host
+placement stays purely load-based.
+
+**Moving a database** to another region is a `PATCH /v1/databases/:id` with a
+new `region` (or the dashboard's Move action). The move ships the current
+state to the object store, marks the database `:moving` — a fence that makes
+every converged node refuse to activate its writer, so a stale read model
+can't revive it in the old region — then reassigns its placement to a node in
+the target region, which restores lazily. Queries racing the move get a
+retryable `database_relocating` (503). The fence is only as timely as the read
+model: the handling node updates synchronously, other region nodes converge
+over the WAL feed, so a query on a not-yet-converged node can still briefly
+reach the old owner (bounded by replication lag) — the same eventual-consistency
+window drains live with. Connection strings return a **global** host
 (`PHX_HOST`, e.g. `alpha.daisy.smolsqls.com`) that a global load balancer
 geo-routes to the nearest region — any node transparently proxies a query to
 the owner — plus a **regional** host that splices the region slug in as the

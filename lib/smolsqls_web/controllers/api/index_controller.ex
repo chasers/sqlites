@@ -83,18 +83,22 @@ defmodule SmolsqlsWeb.Api.IndexController do
           method: "POST",
           path: "#{base}/v1/databases",
           auth: "tenant api_key",
-          body: %{name: "my-task-db"},
+          body: %{name: "my-task-db", region: "gcp-us-central1"},
           returns:
             "database with auth_token and ready-to-use connection strings (under " <>
-              "data.connections) — returned only here, never by GET /databases/:id"
+              "data.connections) — returned only here, never by GET /databases/:id. " <>
+              "region is optional (defaults to the cluster default) and omitted where " <>
+              "regions are not configured"
         },
         %{method: "GET", path: "#{base}/v1/databases/:id", auth: "tenant api_key"},
         %{
           method: "PATCH",
           path: "#{base}/v1/databases/:id",
           auth: "tenant api_key",
-          body: %{litestream_enabled: true},
-          returns: "toggle continuous (litestream) replication for this database"
+          body: %{litestream_enabled: true, region: "gcp-europe-west1"},
+          returns:
+            "toggle continuous (litestream) replication and/or move the database to a " <>
+              "new region (relocates its file; queries are briefly retryable during the move)"
         },
         %{method: "DELETE", path: "#{base}/v1/databases/:id", auth: "tenant api_key"},
         %{
