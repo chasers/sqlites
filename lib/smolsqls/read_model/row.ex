@@ -113,6 +113,7 @@ defmodule Smolsqls.ReadModel.Row do
 
   defp status("pending"), do: :pending
   defp status("active"), do: :active
+  defp status("moving"), do: :moving
   defp status("deleting"), do: :deleting
   defp status("error"), do: :error
 end

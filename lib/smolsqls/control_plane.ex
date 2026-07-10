@@ -542,6 +542,48 @@ defmodule Smolsqls.ControlPlane do
     |> write_through(&ReadModel.put_database/1)
   end
 
+  @doc """
+  Marks a database `:moving` — a transient fence that makes every converged
+  node refuse to activate its writer (`activate_database/1`), so a relocation
+  can ship and reassign it without a stale read model reviving it in the old
+  region. The handling node's read model updates synchronously; other nodes
+  converge over the WAL feed.
+  """
+  @spec mark_moving(Database.t()) :: {:ok, Database.t()} | {:error, Ecto.Changeset.t()}
+  def mark_moving(%Database{} = database) do
+    database
+    |> Database.placement_changeset(%{status: :moving})
+    |> Repo.update()
+    |> write_through(&ReadModel.put_database/1)
+  end
+
+  @doc """
+  Clears the `:moving` fence back to `:active` without changing placement —
+  used to roll back a relocation that failed before the placement row flipped.
+  """
+  @spec revert_moving(Database.t()) :: {:ok, Database.t()} | {:error, Ecto.Changeset.t()}
+  def revert_moving(%Database{} = database) do
+    database
+    |> Database.placement_changeset(%{status: :active})
+    |> Repo.update()
+    |> write_through(&ReadModel.put_database/1)
+  end
+
+  @doc """
+  Reassigns a database to a new region and owning node (its file stays at
+  the same volume-relative path, restored on the target from the object
+  store). The `cloud` provider is re-derived from the region slug and the
+  `:moving` fence is cleared back to `:active`.
+  """
+  @spec move_database(Database.t(), String.t(), node()) ::
+          {:ok, Database.t()} | {:error, Ecto.Changeset.t()}
+  def move_database(%Database{} = database, region, target_node) do
+    database
+    |> Database.move_changeset(%{region: region, node: to_string(target_node)})
+    |> Repo.update()
+    |> write_through(&ReadModel.put_database/1)
+  end
+
   def mark_placed(%Database{} = database, node, file_path) do
     database
     |> Database.placement_changeset(%{

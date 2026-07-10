@@ -36,6 +36,14 @@ defmodule SmolsqlsWeb.Api.ErrorCode do
       {:service_unavailable, "no_capacity_in_region",
        "no node is currently available in the requested region"}
 
+  def classify(:unsupported_region),
+    do: {:unprocessable_entity, "unsupported_region", "the requested region is not supported"}
+
+  def classify(:regions_not_configured),
+    do:
+      {:conflict, "regions_not_configured",
+       "this cluster does not have regions configured; a database's region cannot be changed"}
+
   def classify(:last_api_key),
     do:
       {:unprocessable_entity, "last_api_key",
@@ -113,6 +121,11 @@ defmodule SmolsqlsWeb.Api.ErrorCode do
   def classify(:no_survivors), do: node_unavailable()
   def classify(:unavailable), do: node_unavailable()
   def classify(:database_owner_unavailable), do: node_unavailable()
+
+  def classify(:database_relocating),
+    do:
+      {:service_unavailable, "database_relocating",
+       "database is being moved to another region; retry shortly"}
 
   def classify(:database_not_active),
     do: {:service_unavailable, "database_unavailable", "database is not active"}
