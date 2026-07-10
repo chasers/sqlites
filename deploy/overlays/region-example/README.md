@@ -15,7 +15,7 @@ values.
 | Where | Key | Example | Notes |
 |---|---|---|---|
 | `statefulset-region-patch.yaml` | `REGION` | `gcp-us-central1` | this node's region; upserted to the `nodes` table on boot |
-| `statefulset-region-patch.yaml` | `RELEASE_NODE_HOST` | `$(POD_NAME).smolsqls-us-central1.smolsqls.svc.clusterset.local` | cross-cluster-routable node name (MCS clusterset FQDN) |
+| `statefulset-region-patch.yaml` | `RELEASE_NODE_HOST` | `$(POD_NAME).smolsqls-us-central1.smolsqls-headless.smolsqls.svc.clusterset.local` | per-pod MCS clusterset FQDN `<pod>.<membership>.smolsqls-headless.<ns>.svc.clusterset.local` — `<membership>` = the fleet membership id (`smolsqls-<region>`); the `smolsqls-headless` service-export segment is required (omitting it → NXDOMAIN) |
 | `smolsqls-env` secret | `S3_BUCKET` | `smolsqls-replica-us-central1` | per-region object store |
 
 ## Same across every region

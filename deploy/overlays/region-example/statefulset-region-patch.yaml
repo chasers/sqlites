@@ -14,14 +14,21 @@ spec:
             # a database's owner to a live node in its region.
             - name: REGION
               value: gcp-us-central1
-            # Cross-cluster-routable node name. $(POD_NAME) is substituted from
-            # the env defined in the base StatefulSet; the suffix is this
-            # region's GKE Multi-Cluster-Services clusterset FQDN over the
-            # shared VPC. libcluster broadcasts this verbatim and every node
-            # Node.connect()s to it, so it must resolve and route from every
-            # region.
+            # Cross-cluster-routable node name — the GKE Multi-Cluster-Services
+            # per-pod headless clusterset FQDN. Format:
+            #   <pod>.<membership>.<service-export>.<namespace>.svc.clusterset.local
+            # where <membership> is this cluster's fleet membership id
+            # (smolsqls-<region>) and <service-export> is the exported governing
+            # headless Service (smolsqls-headless). The membership segment makes each
+            # pod's name unique across regions, so the shared smolsqls-headless export
+            # is fine — no per-region Service needed. Omitting the <service-export>
+            # segment yields NXDOMAIN. (The canonical form inserts a .global.
+            # location segment after <membership>; this short form resolves for a
+            # global membership.) $(POD_NAME) comes from the base StatefulSet env;
+            # libcluster broadcasts this verbatim and every node Node.connect()s to
+            # it, so it must resolve and route from every region.
             - name: RELEASE_NODE_HOST
-              value: "$(POD_NAME).smolsqls-us-central1.smolsqls.svc.clusterset.local"
+              value: "$(POD_NAME).smolsqls-us-central1.smolsqls-headless.smolsqls.svc.clusterset.local"
             # Inter-node TLS across regions (see rel/env.sh.eex + runtime.exs).
             - name: DIST_TLS
               value: "true"
