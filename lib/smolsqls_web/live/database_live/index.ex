@@ -466,7 +466,7 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
                   </span>
                   <span
                     :if={database.region}
-                    class="badge badge-sm badge-soft badge-neutral font-mono"
+                    class="badge badge-sm badge-ghost font-mono"
                     title="region"
                   >
                     {database.region}
