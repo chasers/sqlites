@@ -21,6 +21,78 @@ defmodule Smolsqls do
     end
   end
 
+  @doc """
+  Moves a database to `new_region` — changing where its file lives and its
+  writer runs. Sequence: pick a node in the target region; establish an
+  object-store snapshot for a never-shipped database (while still active);
+  mark the database `:moving` (a fence — converged nodes refuse to activate
+  its writer, so a stale read model can't revive it in the old region); ship
+  the live writer's final state; then flip the placement row and clear the
+  fence. The new owner restores lazily on its next activation. A no-op when
+  the region is unchanged; a failure after fencing rolls the status back to
+  `:active`.
+
+  The fence is only as timely as the read model: the handling node updates
+  synchronously, other region nodes converge over the WAL feed, so a query
+  racing the move on a not-yet-converged node can still briefly activate the
+  old owner (bounded by replication lag) — the same eventual-consistency
+  window drains live with.
+
+  Errors: `:regions_not_configured` (the region system is dormant),
+  `:unsupported_region`, `:no_capacity_in_region`.
+  """
+  @spec relocate_database(Database.t(), String.t()) :: {:ok, Database.t()} | {:error, term()}
+  def relocate_database(%Database{} = database, new_region) when is_binary(new_region) do
+    cond do
+      not Smolsqls.Regions.enabled?() ->
+        {:error, :regions_not_configured}
+
+      new_region == database.region ->
+        {:ok, database}
+
+      new_region not in Smolsqls.Regions.all() ->
+        {:error, :unsupported_region}
+
+      true ->
+        do_relocate(database, new_region)
+    end
+  end
+
+  defp do_relocate(%Database{} = database, new_region) do
+    with {:ok, target} <- DataPlane.pick_region_node(new_region),
+         :ok <- DataPlane.ensure_snapshot_for_move(database),
+         {:ok, moving} <- ControlPlane.mark_moving(database) do
+      case finalize_relocation(moving, new_region, target) do
+        {:ok, moved} ->
+          {:ok, moved}
+
+        {:error, reason} ->
+          revert_relocation(moving, reason)
+      end
+    end
+  end
+
+  defp finalize_relocation(%Database{} = moving, new_region, target) do
+    with :ok <- DataPlane.stop_hot_for_move(moving) do
+      ControlPlane.move_database(moving, new_region, target)
+    end
+  end
+
+  defp revert_relocation(%Database{} = moving, reason) do
+    case ControlPlane.revert_moving(moving) do
+      {:ok, _reverted} ->
+        :ok
+
+      {:error, revert_error} ->
+        Logger.error(
+          "relocation of #{moving.id} failed (#{inspect(reason)}) and could not clear the " <>
+            ":moving fence: #{inspect(revert_error)}"
+        )
+    end
+
+    {:error, reason}
+  end
+
   @pitr_window_days 30
 
   @doc """

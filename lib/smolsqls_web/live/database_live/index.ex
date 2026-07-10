@@ -21,6 +21,7 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
          |> assign(:new_token_form, to_form(%{"name" => ""}))
          |> assign(:branch_form, to_form(%{"name" => ""}))
          |> assign(:branching_database_id, nil)
+         |> assign(:moving_database_id, nil)
          |> assign(:revealed_database_id, nil)
          |> assign(:tokens, [])
          |> assign(:revealed_secrets, %{})
@@ -64,6 +65,33 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
      socket
      |> assign(:branching_database_id, next)
      |> assign(:branch_form, to_form(%{"name" => ""}))}
+  end
+
+  def handle_event("toggle_move", %{"id" => id}, socket) do
+    next = if socket.assigns.moving_database_id == id, do: nil, else: id
+    {:noreply, assign(socket, :moving_database_id, next)}
+  end
+
+  def handle_event("move_region", %{"db_id" => id, "region" => region}, socket) do
+    with database when not is_nil(database) <-
+           ControlPlane.get_database(socket.assigns.tenant, id),
+         {:ok, moved} <- Smolsqls.relocate_database(database, region) do
+      {:noreply,
+       socket
+       |> put_flash(:info, "Moving #{moved.name} to #{region}")
+       |> assign(:moving_database_id, nil)
+       |> load_databases()}
+    else
+      nil ->
+        {:noreply, put_flash(socket, :error, "Database not found")}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, put_flash(socket, :error, "Invalid: #{ChangesetError.message(changeset)}")}
+
+      {:error, reason} ->
+        {_status, _code, message} = ErrorCode.classify(reason)
+        {:noreply, put_flash(socket, :error, "Move failed: #{message}")}
+    end
   end
 
   def handle_event("branch", %{"name" => name} = params, socket) do
@@ -462,6 +490,14 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
                     Branch
                   </button>
                   <button
+                    :if={@regions != [] and database.region}
+                    class="btn btn-ghost btn-sm"
+                    phx-click="toggle_move"
+                    phx-value-id={database.id}
+                  >
+                    Move
+                  </button>
+                  <button
                     class="btn btn-ghost btn-sm text-error"
                     phx-click="delete"
                     phx-value-id={database.id}
@@ -503,6 +539,29 @@ defmodule SmolsqlsWeb.DatabaseLive.Index do
                     do:
                       "Seeded from the latest snapshot, or an exact point in time — an independent copy.",
                     else: "Seeded from the latest snapshot — an independent copy."}
+                </p>
+              </div>
+              <div
+                :if={@moving_database_id == database.id}
+                class="rounded-md border border-base-300 bg-base-100 p-3 space-y-2"
+              >
+                <form phx-submit="move_region" class="flex gap-2" id={"move-#{database.id}"}>
+                  <input type="hidden" name="db_id" value={database.id} />
+                  <select
+                    name="region"
+                    class="select select-bordered select-sm flex-1 font-mono text-xs"
+                    required
+                  >
+                    <option value="" disabled selected>move to region…</option>
+                    <option :for={region <- @regions -- [database.region]} value={region}>
+                      {region}
+                    </option>
+                  </select>
+                  <button class="btn btn-sm btn-primary">Move</button>
+                </form>
+                <p class="text-xs text-base-content/50">
+                  Ships the current state, then relocates the file to a node in the new region.
+                  Queries are briefly rejected (retryable) during the move.
                 </p>
               </div>
               <div :if={@revealed_database_id == database.id} class="space-y-3 text-sm">

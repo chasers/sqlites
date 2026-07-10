@@ -229,6 +229,36 @@ defmodule Smolsqls.DistributedTest do
     assert owner == Node.self()
   end
 
+  test "relocating a database to another region moves it to that region's node",
+       %{peer_node: peer_node} do
+    region_a = "gcp-us-central1"
+    region_b = "gcp-europe-west1"
+
+    Application.put_env(:smolsqls, :regions, [region_a, region_b])
+    Application.put_env(:smolsqls, :default_region, region_a)
+
+    on_exit(fn ->
+      Application.put_env(:smolsqls, :regions, [])
+      Application.put_env(:smolsqls, :default_region, nil)
+    end)
+
+    database = checked_out_shipped_database()
+    assert database.region == region_a
+    assert database.node == to_string(Node.self())
+
+    {:ok, _} = Smolsqls.ControlPlane.upsert_node(to_string(Node.self()), region_a)
+    {:ok, _} = Smolsqls.ControlPlane.upsert_node(to_string(peer_node), region_b)
+
+    assert {:ok, moved} = Smolsqls.relocate_database(database, region_b)
+    assert moved.region == region_b
+    assert moved.node == to_string(peer_node)
+    assert moved.status == :active
+
+    assert {:ok, %{rows: [["survives"]]}} = Router.query(moved.id, "SELECT v FROM t")
+    assert {:ok, owner} = Registry.owner_node(moved.id)
+    assert owner == peer_node
+  end
+
   defp checked_out_shipped_database do
     Ecto.Adapters.SQL.Sandbox.checkout(Smolsqls.Repo)
     Ecto.Adapters.SQL.Sandbox.mode(Smolsqls.Repo, {:shared, self()})

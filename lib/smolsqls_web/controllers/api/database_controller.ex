@@ -31,10 +31,17 @@ defmodule SmolsqlsWeb.Api.DatabaseController do
 
     with {:ok, database} <- fetch_database(conn, id),
          {:ok, database} <- ControlPlane.update_database_settings(database, settings),
-         :ok <- Smolsqls.DataPlane.set_replication(database) do
+         :ok <- Smolsqls.DataPlane.set_replication(database),
+         {:ok, database} <- maybe_relocate(database, params) do
       render(conn, :show, database: database, include_token: true)
     end
   end
+
+  defp maybe_relocate(database, %{"region" => region}) when is_binary(region) and region != "" do
+    Smolsqls.relocate_database(database, region)
+  end
+
+  defp maybe_relocate(database, _params), do: {:ok, database}
 
   def delete(conn, %{"id" => id}) do
     with {:ok, database} <- fetch_database(conn, id),
