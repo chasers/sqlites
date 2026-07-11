@@ -454,15 +454,7 @@ defmodule Smolsqls.ControlPlane do
         {:error, changeset} -> Repo.rollback(changeset)
       end
     end)
-    |> case do
-      {:ok, {database, token}} ->
-        write_through({:ok, database}, &ReadModel.put_database/1)
-        write_through({:ok, token}, &ReadModel.put_database_token/1)
-        {:ok, %{database | auth_token: token.token}}
-
-      {:error, changeset} ->
-        {:error, changeset}
-    end
+    |> finish_database_insert()
   end
 
   defp database_count(%Tenant{id: tenant_id}) do
@@ -519,16 +511,16 @@ defmodule Smolsqls.ControlPlane do
         {:error, changeset} -> Repo.rollback(changeset)
       end
     end)
-    |> case do
-      {:ok, {database, token}} ->
-        write_through({:ok, database}, &ReadModel.put_database/1)
-        write_through({:ok, token}, &ReadModel.put_database_token/1)
-        {:ok, %{database | auth_token: token.token}}
-
-      {:error, changeset} ->
-        {:error, changeset}
-    end
+    |> finish_database_insert()
   end
+
+  defp finish_database_insert({:ok, {database, token}}) do
+    write_through({:ok, database}, &ReadModel.put_database/1)
+    write_through({:ok, token}, &ReadModel.put_database_token/1)
+    {:ok, %{database | auth_token: token.token}}
+  end
+
+  defp finish_database_insert({:error, changeset}), do: {:error, changeset}
 
   defp put_source_region(attrs, %Database{region: nil}), do: attrs
 

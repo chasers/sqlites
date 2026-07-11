@@ -11,7 +11,8 @@ defmodule Smolsqls.ControlPlane.TenantApiKey do
   """
 
   use Ecto.Schema
-  import Ecto.Changeset
+
+  alias Smolsqls.ControlPlane.SecretToken
 
   @type t :: %__MODULE__{}
 
@@ -31,37 +32,12 @@ defmodule Smolsqls.ControlPlane.TenantApiKey do
   end
 
   def create_changeset(api_key, attrs) do
-    secret = generate()
-
-    api_key
-    |> cast(attrs, [:name, :expires_at])
-    |> put_change(:token, secret)
-    |> put_change(:token_hash, Smolsqls.Secrets.hash(secret))
-    |> put_change(:token_ciphertext, Smolsqls.Secrets.encrypt(secret))
-    |> validate_expires_in_future()
+    SecretToken.create_changeset(api_key, attrs, generate())
   end
 
-  def update_changeset(api_key, attrs) do
-    api_key
-    |> cast(attrs, [:name, :enabled])
-    |> validate_required([:enabled])
-  end
+  defdelegate update_changeset(api_key, attrs), to: SecretToken
 
   def generate do
     "sk_" <> Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
-  end
-
-  defp validate_expires_in_future(changeset) do
-    case get_change(changeset, :expires_at) do
-      nil ->
-        changeset
-
-      expires_at ->
-        if DateTime.after?(expires_at, DateTime.utc_now()) do
-          changeset
-        else
-          add_error(changeset, :expires_at, "must be in the future")
-        end
-    end
   end
 end
