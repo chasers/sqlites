@@ -357,6 +357,14 @@ database server on it, and assert that syn resolves it from the primary
 node and that queries round-trip over gen_rpc (on a distinct TCP port),
 including deregistration when the peer dies.
 
+`netsplit_test.exs` goes further: it boots the peer with its control
+channel on `:standard_io` (independent of Erlang distribution), so it can
+sever distribution between the nodes — a cookie mismatch plus
+`disconnect_node`, which also blocks reconnection — while still driving both
+sides with `:peer.call`. It uses that to drive `:syn` into a real registry
+conflict across a healed partition and assert the `SynHandler` resolves it to
+one deterministic surviving writer.
+
 ## Quality gate
 
 ```sh
