@@ -111,7 +111,7 @@ defmodule Smolsqls.MixProject do
         "deps.unlock --unused",
         "format",
         "credo --strict",
-        "ex_dna --max-clones 5",
+        "ex_dna",
         "test"
       ],
       ci: [
@@ -122,7 +122,7 @@ defmodule Smolsqls.MixProject do
         "credo --strict",
         "deps.audit",
         "sobelow",
-        "ex_dna --max-clones 5",
+        "ex_dna",
         "reach.check --arch --smells --strict --baseline .reach.baseline.json"
       ]
     ]

@@ -19,31 +19,11 @@ defmodule Smolsqls.Backups.Sweeper do
   *artifact* floor, not point-in-time recovery.
   """
 
-  use GenServer
+  use Smolsqls.LeaderSweeper, advisory_lock_key: 5_142_003, interval: :timer.hours(1)
 
   require Logger
 
   alias Smolsqls.Backups
-  alias Smolsqls.Repo
-
-  @advisory_lock_key 5_142_003
-
-  def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
-  end
-
-  @impl true
-  def init(_opts) do
-    schedule_sweep(initial_delay())
-    {:ok, %{}}
-  end
-
-  @impl true
-  def handle_info(:sweep, state) do
-    sweep()
-    schedule_sweep(interval())
-    {:noreply, state}
-  end
 
   @doc """
   Runs one sweep if this node wins the advisory lock; otherwise a no-op.
@@ -76,27 +56,5 @@ defmodule Smolsqls.Backups.Sweeper do
     end
   end
 
-  defp as_leader(fun) do
-    Repo.checkout(fn ->
-      case Repo.query!("SELECT pg_try_advisory_lock($1)", [@advisory_lock_key]) do
-        %{rows: [[true]]} ->
-          try do
-            fun.()
-          after
-            Repo.query!("SELECT pg_advisory_unlock($1)", [@advisory_lock_key])
-          end
-
-        _ ->
-          nil
-      end
-    end)
-  end
-
-  defp schedule_sweep(delay), do: Process.send_after(self(), :sweep, delay)
-
-  defp config, do: Application.get_env(:smolsqls, __MODULE__, [])
-  defp interval, do: config()[:interval] || :timer.hours(1)
-  defp initial_delay, do: config()[:initial_delay] || :timer.minutes(1)
   defp sla_ms, do: config()[:sla_ms] || :timer.hours(24)
-  defp batch_size, do: config()[:batch_size] || 500
 end
