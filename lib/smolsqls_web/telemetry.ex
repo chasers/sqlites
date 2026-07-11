@@ -65,6 +65,7 @@ defmodule SmolsqlsWeb.Telemetry do
       counter("smolsqls.node_operation.count", tags: [:kind, :result]),
       counter("smolsqls.rate_limiter.rejected.count"),
       counter("smolsqls.fence.stopped.count"),
+      counter("smolsqls.syn.conflict_resolved.count"),
       sum("smolsqls.reconciler.claimed.count"),
       distribution("phoenix.router_dispatch.stop.duration_ms",
         event_name: [:phoenix, :router_dispatch, :stop],

@@ -10,6 +10,7 @@ defmodule Smolsqls.DataPlane.Registry do
   def scope, do: @scope
 
   def init do
+    :syn.set_event_handler(Smolsqls.DataPlane.SynHandler)
     :syn.add_node_to_scopes([@scope])
   end
 
