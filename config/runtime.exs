@@ -71,6 +71,7 @@ if config_env() == :prod do
 
   config :smolsqls, SmolsqlsWeb.Endpoint,
     url: [host: host, port: url_port, scheme: url_scheme],
+    check_origin: :conn,
     http: [
       # Enable IPv6 and bind on all interfaces.
       # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
