@@ -44,7 +44,7 @@ defmodule Smolsqls.DataPlane.CacheEvictor do
   def sweep do
     high_water = config()[:high_water_bytes]
     entries = local_entries()
-    total = entries |> Enum.map(& &1.size) |> Enum.sum()
+    total = Enum.sum_by(entries, & &1.size)
 
     if is_integer(high_water) and total > high_water do
       target = trunc(high_water * low_water_ratio())
@@ -129,13 +129,12 @@ defmodule Smolsqls.DataPlane.CacheEvictor do
 
   defp files_size(file_path) do
     [file_path, file_path <> "-wal", file_path <> "-shm"]
-    |> Enum.map(fn path ->
+    |> Enum.sum_by(fn path ->
       case File.stat(path) do
         {:ok, %File.Stat{size: size}} -> size
         {:error, _} -> 0
       end
     end)
-    |> Enum.sum()
   end
 
   defp mtime(path) do

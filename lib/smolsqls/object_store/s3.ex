@@ -141,10 +141,7 @@ defmodule Smolsqls.ObjectStore.S3 do
   end
 
   defp gzip?(path) do
-    case File.open(path, [:read, :binary], &IO.binread(&1, 2)) do
-      {:ok, <<0x1F, 0x8B>>} -> true
-      _ -> false
-    end
+    match?({:ok, <<0x1F, 0x8B>>}, File.open(path, [:read, :binary], &IO.binread(&1, 2)))
   end
 
   defp gzip_file(source_path, dest_path) do
