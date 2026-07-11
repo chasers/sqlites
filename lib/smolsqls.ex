@@ -243,40 +243,17 @@ defmodule Smolsqls do
     end
   end
 
+  @doc """
+  Deletes a tenant. Refuses with `{:error, :tenant_has_databases}` unless the
+  tenant has none — the client must delete its databases first (one at a
+  time, through the normal single-database path) rather than relying on a
+  bulk cascade here.
+  """
   @spec delete_tenant(Tenant.t()) :: {:ok, Tenant.t()} | {:error, term()}
   def delete_tenant(%Tenant{} = tenant) do
-    case remove_tenant_databases(tenant) do
-      :ok -> ControlPlane.delete_tenant(tenant)
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp remove_tenant_databases(%Tenant{} = tenant) do
     case ControlPlane.list_databases(tenant) do
-      [] -> :ok
-      databases -> remove_leaves(tenant, databases)
+      [] -> ControlPlane.delete_tenant(tenant)
+      [_ | _] -> {:error, :tenant_has_databases}
     end
-  end
-
-  defp remove_leaves(%Tenant{} = tenant, databases) do
-    case Enum.reject(databases, &ControlPlane.has_branches?/1) do
-      [] ->
-        {:error, :branch_cycle}
-
-      leaves ->
-        case remove_each(leaves) do
-          :ok -> remove_tenant_databases(tenant)
-          {:error, reason} -> {:error, reason}
-        end
-    end
-  end
-
-  defp remove_each(databases) do
-    Enum.reduce_while(databases, :ok, fn database, :ok ->
-      case remove_database(database) do
-        {:ok, _} -> {:cont, :ok}
-        {:error, reason} -> {:halt, {:error, {database.id, reason}}}
-      end
-    end)
   end
 end
