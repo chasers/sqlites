@@ -80,6 +80,11 @@ defmodule SmolsqlsWeb.Api.ErrorCode do
       {:conflict, "has_branches",
        "database has branches; delete them before deleting this database"}
 
+  def classify(:tenant_has_databases),
+    do:
+      {:conflict, "tenant_has_databases",
+       "tenant has databases; delete them before deleting the tenant"}
+
   def classify(:database_busy_in_transaction),
     do:
       {:conflict, "database_busy_in_transaction",

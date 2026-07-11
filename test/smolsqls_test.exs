@@ -28,18 +28,19 @@ defmodule SmolsqlsTest do
     assert DataPlane.Registry.whereis(database.id) == :undefined
   end
 
-  test "delete_tenant/1 drains every database before deleting the tenant" do
+  test "delete_tenant/1 refuses while the tenant has databases" do
     tenant = tenant_fixture()
     database_a = placed_database_fixture(tenant)
     database_b = placed_database_fixture(tenant)
 
+    assert {:error, :tenant_has_databases} = Smolsqls.delete_tenant(tenant)
+    assert ControlPlane.get_tenant(tenant.id) != nil
+
+    assert {:ok, _} = Smolsqls.remove_database(database_a)
+    assert {:error, :tenant_has_databases} = Smolsqls.delete_tenant(tenant)
+
+    assert {:ok, _} = Smolsqls.remove_database(database_b)
     assert {:ok, _} = Smolsqls.delete_tenant(tenant)
-
-    for database <- [database_a, database_b] do
-      refute File.exists?(database.file_path)
-      assert DataPlane.Registry.whereis(database.id) == :undefined
-    end
-
     assert ControlPlane.get_tenant(tenant.id) == nil
   end
 
@@ -72,14 +73,17 @@ defmodule SmolsqlsTest do
     assert ControlPlane.get_database(source.id) == nil
   end
 
-  test "delete_tenant/1 deletes branches before their sources" do
+  test "delete_tenant/1 refuses even when the only database left is a branch" do
     tenant = tenant_fixture()
     {source, branch} = branch_of(tenant)
 
-    assert {:ok, _} = Smolsqls.delete_tenant(tenant)
+    assert {:error, :tenant_has_databases} = Smolsqls.delete_tenant(tenant)
 
+    assert {:ok, _} = Smolsqls.remove_database(branch)
+    assert {:error, :tenant_has_databases} = Smolsqls.delete_tenant(tenant)
+
+    assert {:ok, _} = Smolsqls.remove_database(source)
+    assert {:ok, _} = Smolsqls.delete_tenant(tenant)
     assert ControlPlane.get_tenant(tenant.id) == nil
-    assert ControlPlane.get_database(source.id) == nil
-    assert ControlPlane.get_database(branch.id) == nil
   end
 end
