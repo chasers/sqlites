@@ -36,10 +36,13 @@ defmodule Smolsqls.Failover do
         |> select([d], d.id)
         |> Repo.all()
 
+      survivor_ring = List.to_tuple(survivors)
+      survivor_count = tuple_size(survivor_ring)
+
       reassigned =
         ids
         |> Enum.with_index()
-        |> Enum.group_by(fn {_id, index} -> Enum.at(survivors, rem(index, length(survivors))) end)
+        |> Enum.group_by(fn {_id, index} -> elem(survivor_ring, rem(index, survivor_count)) end)
         |> Enum.reduce(0, fn {survivor, entries}, acc ->
           chunk_ids = Enum.map(entries, fn {id, _} -> id end)
 

@@ -2,8 +2,25 @@ This is a web application written using the Phoenix web framework.
 
 ## Project guidelines
 
-- Use `mix precommit` alias when you are done with all changes and fix any pending issues (it compiles with warnings-as-errors, formats, runs `credo --strict`, and tests). `mix ci` is the non-mutating superset CI runs (adds format/unused-deps checks, `deps.audit`, `hex.audit`, and `sobelow`); it must pass before a PR is green. The `operator/` subproject has its own `mix ci`.
+- Use `mix precommit` alias when you are done with all changes and fix any pending issues (it compiles with warnings-as-errors, formats, runs `credo --strict`, checks for duplication with `ex_dna`, and tests). `mix ci` is the non-mutating superset CI runs (adds format/unused-deps checks, `deps.audit`, `hex.audit`, `sobelow`, and structural checks via `reach.check --arch --smells`); it must pass before a PR is green. The `operator/` subproject has its own `mix ci`.
 - Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
+
+## Understanding the codebase & anti-slop tooling
+
+Before reading files one by one, use these static-analysis tools — they answer structural questions faster and more accurately than grepping, and they catch AI-generated slop the compiler won't. All support `--format json` for machine consumption.
+
+- **Orient in an unfamiliar area** — `mix reach.map` gives the project map: modules, coupling, `--hotspots` (highest-risk functions by branches × callers), `--boundaries` (layer violations), `--effects`, `--depth`. Prefer this over fanning out reads across many files just to understand structure.
+- **Before editing a function/module** — `mix reach.inspect <Mod.fun/arity | file:line> --impact --deps --why <target>` shows the blast radius (callers, dependents, slices) so you know what a change touches.
+- **Trace data flow / taint** — `mix reach.trace --from params --to write!` (or `--backward file:line` / `--forward`) for security and refactor reasoning.
+- **OTP topology** — `mix reach.otp` (add `--concurrency`) shows GenServer state machines, missing message handlers, and supervision trees.
+- **Find dead code** — `mix reach.check --dead-code` (advisory; not a CI gate).
+- **Find duplication before extracting a helper** — `mix ex_dna` lists clones; `mix ex_dna.explain <n>` shows the anti-unification and suggested extraction.
+
+Slop gates enforced by CI (don't disable them to get green — fix the code):
+
+- `credo --strict` runs the **ex_slop** plugin: 40 checks for LLM patterns (blanket rescues, narrator/obvious comments, anti-idiomatic `Enum`, N+1). Matches the "no explanatory comments" rule.
+- `ex_dna --max-clones 5` ratchets duplication — a new clone fails CI. When you legitimately remove clones, lower the number; never raise it to paper over a paste.
+- `reach.check --arch` enforces the layer/call policy in `.reach.exs`; `--smells --strict --baseline .reach.baseline.json` fails on *new* structural smells only. If you intentionally accept a new smell, regenerate the baseline with `mix reach.check --smells --write-baseline .reach.baseline.json` and commit it.
 
 ### Phoenix v1.8 guidelines
 
