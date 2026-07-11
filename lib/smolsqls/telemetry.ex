@@ -30,6 +30,8 @@ defmodule Smolsqls.Telemetry do
     * `[:smolsqls, :rate_limiter, :rejected]` — `%{count}`
     * `[:smolsqls, :fence, :stopped]` — `%{count}`
     * `[:smolsqls, :hot_servers]` — `%{count}` (polled)
+    * `[:smolsqls, :syn, :conflict_resolved]` — `%{count}` (registry
+      conflict resolved at partition heal or reassign race)
   """
 
   @spec query(integer(), atom() | String.t(), boolean(), boolean()) :: :ok
@@ -90,6 +92,11 @@ defmodule Smolsqls.Telemetry do
   @spec fenced() :: :ok
   def fenced do
     :telemetry.execute([:smolsqls, :fence, :stopped], %{count: 1}, %{})
+  end
+
+  @spec syn_conflict_resolved() :: :ok
+  def syn_conflict_resolved do
+    :telemetry.execute([:smolsqls, :syn, :conflict_resolved], %{count: 1}, %{})
   end
 
   @doc """
